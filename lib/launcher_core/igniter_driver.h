@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "config_shared.h"
 
 void igniter_init(uint8_t pin);
 void igniter_startPulse(uint32_t durationMs);

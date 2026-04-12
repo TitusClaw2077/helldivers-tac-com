@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
 #include "protocol_types.h"
 #include "config_shared.h"
 

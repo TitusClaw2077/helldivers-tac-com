@@ -66,6 +66,7 @@ This project controls a wireless rocket ignition system. See `docs/` for the ful
 - [BOM](docs/BOM.md)
 - [Launcher Wiring](docs/LAUNCHER_WIRING.md)
 - [Firmware Architecture](docs/FIRMWARE_ARCHITECTURE.md)
+- [Bench Bring-Up Guide](docs/BENCH_BRINGUP.md)
 
 ## Contributors
 - **Defcon88** — project lead, hardware, rocketry
