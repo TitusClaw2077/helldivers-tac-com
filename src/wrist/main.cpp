@@ -15,6 +15,12 @@ static bool gWasArmed = false;
 // Request token counter for fire commands
 static uint32_t gFireToken = 0;
 
+static void printMac(const char* label, const uint8_t* mac) {
+    Serial.printf("[WRIST] %s %02X:%02X:%02X:%02X:%02X:%02X\n",
+                  label,
+                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
+
 // ─── Setup ───────────────────────────────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
@@ -28,6 +34,13 @@ void setup() {
 
     // Init ESP-NOW (WiFi must be STA before esp_now_init)
     WiFi.mode(WIFI_STA);
+    uint8_t staMac[6] = {0};
+    WiFi.macAddress(staMac);
+    printMac("Actual STA MAC:", staMac);
+
+    const uint8_t expectedLauncherMac[6] = LAUNCHER_MAC;
+    printMac("Configured launcher peer:", expectedLauncherMac);
+
     if (esp_now_init() != ESP_OK) {
         Serial.println("[WRIST] ESP-NOW init failed — halting");
         while (true) delay(1000);

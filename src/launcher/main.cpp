@@ -22,6 +22,12 @@ static uint32_t gPendingFireToken = 0;
 static bool     gFireAckPending   = false;
 static uint32_t gFireStartMs      = 0;
 
+static void printMac(const char* label, const uint8_t* mac) {
+    Serial.printf("[LAUNCHER] %s %02X:%02X:%02X:%02X:%02X:%02X\n",
+                  label,
+                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
+
 // ─── Ignition complete callback ──────────────────────────────────────────────
 static void onIgnitionComplete() {
     launcherState_onIgnitionComplete(gState);
@@ -52,6 +58,9 @@ void setup() {
 
     // ── Interlock switch input ───────────────────────────────────────────────
     pinMode(PIN_ARM_SENSE, INPUT);
+    Serial.printf("[LAUNCHER] ARM sense pin=%d initial raw=%d\n",
+                  PIN_ARM_SENSE,
+                  digitalRead(PIN_ARM_SENSE));
 
     // ── State machine ────────────────────────────────────────────────────────
     launcherState_init(gState);
@@ -59,6 +68,13 @@ void setup() {
 
     // ── ESP-NOW ──────────────────────────────────────────────────────────────
     WiFi.mode(WIFI_STA);
+    uint8_t staMac[6] = {0};
+    WiFi.macAddress(staMac);
+    printMac("Actual STA MAC:", staMac);
+
+    const uint8_t expectedWristMac[6] = WRIST_MAC;
+    printMac("Configured wrist peer:", expectedWristMac);
+
     if (esp_now_init() != ESP_OK) {
         Serial.println("[LAUNCHER] ESP-NOW init failed — halting");
         while (true) delay(1000);
@@ -78,10 +94,14 @@ void loop() {
     radio_link_tick(now);
 
     // ── 2. Interlock switch read ──────────────────────────────────────────────
-    bool keySwitchNow = (digitalRead(PIN_ARM_SENSE) == HIGH);
+    int rawArmSense = digitalRead(PIN_ARM_SENSE);
+    bool keySwitchNow = (rawArmSense == HIGH);
     if (keySwitchNow != gState.keySwitchOn) {
         launcherState_onInterlockChanged(gState, keySwitchNow);
-        Serial.printf("[LAUNCHER] Key switch: %s\n", keySwitchNow ? "ARM" : "SAFE");
+        Serial.printf("[LAUNCHER] Key switch: %s (raw=%d pin=%d)\n",
+                      keySwitchNow ? "ARM" : "SAFE",
+                      rawArmSense,
+                      PIN_ARM_SENSE);
     }
 
     // ── 3. Service ignition pulse ─────────────────────────────────────────────

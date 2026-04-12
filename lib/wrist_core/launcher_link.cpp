@@ -49,7 +49,10 @@ static void onRecv(const uint8_t* mac, const uint8_t* data, int len) {
 
     // Validate sender is the known launcher
     if (memcmp(mac, k_launcherMac, 6) != 0) {
-        Serial.println("[WRIST/link] Recv from unknown MAC — ignored");
+        Serial.printf("[WRIST/link] Recv from unknown MAC %02X:%02X:%02X:%02X:%02X:%02X, expected %02X:%02X:%02X:%02X:%02X:%02X — ignored\n",
+                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+                      k_launcherMac[0], k_launcherMac[1], k_launcherMac[2],
+                      k_launcherMac[3], k_launcherMac[4], k_launcherMac[5]);
         return;
     }
 
