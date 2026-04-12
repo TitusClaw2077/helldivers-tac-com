@@ -15,6 +15,55 @@ static bool gWasArmed = false;
 // Request token counter for fire commands
 static uint32_t gFireToken = 0;
 
+static const char* stateName(LauncherSafetyState state) {
+    switch (state) {
+        case LauncherSafetyState::BOOTING:   return "BOOTING";
+        case LauncherSafetyState::DISARMED: return "DISARMED";
+        case LauncherSafetyState::ARMED:    return "ARMED";
+        case LauncherSafetyState::FIRING:   return "FIRING";
+        case LauncherSafetyState::FIRED:    return "FIRED";
+        case LauncherSafetyState::FAULT:    return "FAULT";
+        default:                            return "UNKNOWN";
+    }
+}
+
+static void printLinkStatus() {
+    Serial.printf("[WRIST] Link status: online=%d state=%s armed=%d key=%d cont=%d fire_ok=%d last_event=%u fault=%u\n",
+                  gLink.online,
+                  stateName(gLink.remoteState),
+                  gLink.armed,
+                  gLink.keySwitchOn,
+                  gLink.continuityOk,
+                  gLink.firePermitted,
+                  (unsigned)gLink.lastEvent,
+                  (unsigned)gLink.lastFaultCode);
+}
+
+static void handleSerialConsole() {
+    if (!Serial.available()) return;
+
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+    cmd.toLowerCase();
+
+    if (cmd.length() == 0) return;
+
+    if (cmd == "arm") {
+        Serial.println("[WRIST] Serial command: ARM");
+        launcher_link_sendArmSet(gLink, true);
+    } else if (cmd == "disarm") {
+        Serial.println("[WRIST] Serial command: DISARM");
+        launcher_link_sendArmSet(gLink, false);
+    } else if (cmd == "status") {
+        printLinkStatus();
+    } else if (cmd == "help" || cmd == "?") {
+        Serial.println("[WRIST] Serial commands: arm, disarm, status, help");
+    } else {
+        Serial.printf("[WRIST] Unknown serial command: %s\n", cmd.c_str());
+        Serial.println("[WRIST] Serial commands: arm, disarm, status, help");
+    }
+}
+
 static void printMac(const char* label, const uint8_t* mac) {
     Serial.printf("[WRIST] %s %02X:%02X:%02X:%02X:%02X:%02X\n",
                   label,
@@ -55,6 +104,7 @@ void setup() {
     // TODO: init battery monitor ADC
 
     Serial.println("[WRIST] Ready");
+    Serial.println("[WRIST] Serial commands: arm, disarm, status, help");
 }
 
 // ─── Main loop ───────────────────────────────────────────────────────────────
@@ -63,6 +113,9 @@ void loop() {
 
     // ── 1. Service ESP-NOW comms ──────────────────────────────────────────────
     launcher_link_tick(gLink, now);
+
+    // ── 1b. Temporary serial debug console for bench testing ─────────────────
+    handleSerialConsole();
 
     // ── 2. Detect DISARMED→ARMED transition ──────────────────────────────────
     bool currentlyArmed = gLink.online && gLink.armed;
