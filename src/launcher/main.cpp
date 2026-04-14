@@ -4,6 +4,7 @@
 #include "launcher_state.h"
 #include "radio_link.h"
 #include "igniter_driver.h"
+#include "continuity.h"
 #include "config_shared.h"
 
 // ─── Runtime state ───────────────────────────────────────────────────────────
@@ -61,6 +62,9 @@ void setup() {
     Serial.printf("[LAUNCHER] ARM sense pin=%d initial raw=%d\n",
                   PIN_ARM_SENSE,
                   digitalRead(PIN_ARM_SENSE));
+
+    // ── Continuity ADC input ────────────────────────────────────────────────
+    continuity_init();
 
     // ── State machine ────────────────────────────────────────────────────────
     launcherState_init(gState);
@@ -152,13 +156,17 @@ void loop() {
         }
     }
 
-    // ── 7. TODO: service continuity ADC ──────────────────────────────────────
-    // continuity_tick(now);
-    // ContinuityState cs = continuity_getState();
-    // if (cs != gPrevContinuity) {
-    //     launcherState_onContinuityChanged(gState, cs);
-    //     gPrevContinuity = cs;
-    // }
+    // ── 7. Service continuity ADC ────────────────────────────────────────────
+    continuity_tick(now);
+    ContinuityState cs = continuity_getState();
+    if (cs != gState.continuity) {
+        launcherState_onContinuityChanged(gState, cs);
+
+        ContinuityDebugInfo dbg = continuity_getDebugInfo();
+        Serial.printf("[LAUNCHER] Continuity update: raw=%u state=%u\n",
+                      static_cast<unsigned>(dbg.rawAverage),
+                      static_cast<unsigned>(cs));
+    }
 
     // ── 8. Detect state changes that should push STATUS ───────────────────────
     bool stateChanged = (gState.state     != gPrevState)      ||
