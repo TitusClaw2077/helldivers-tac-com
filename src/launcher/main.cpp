@@ -108,6 +108,8 @@ void loop() {
                       PIN_ARM_SENSE);
     }
 
+    continuity_setMonitoringEnabled(gState.keySwitchOn);
+
     // ── 3. Service ignition pulse ─────────────────────────────────────────────
     igniter_service(now);
 
