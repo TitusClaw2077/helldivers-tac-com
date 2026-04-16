@@ -353,8 +353,6 @@ void serviceTouch() {
 }
 
 bool shouldRedraw(const LauncherLinkState& link, uint32_t now) {
-    if (link.lastRxSeq != gLastRxSeq) return true;
-    if (link.lastStatusRxMs != gLastStatusRxMs) return true;
     if (link.online != gLastOnline) return true;
     if (link.armed != gLastArmed) return true;
     if (link.keySwitchOn != gLastKey) return true;
@@ -367,8 +365,6 @@ bool shouldRedraw(const LauncherLinkState& link, uint32_t now) {
 
 void rememberState(const LauncherLinkState& link, uint32_t now) {
     gLastDrawMs = now;
-    gLastRxSeq = link.lastRxSeq;
-    gLastStatusRxMs = link.lastStatusRxMs;
     gLastOnline = link.online;
     gLastArmed = link.armed;
     gLastKey = link.keySwitchOn;
@@ -376,6 +372,8 @@ void rememberState(const LauncherLinkState& link, uint32_t now) {
     gLastState = link.remoteState;
     gLastEvent = link.lastEvent;
     gLastFault = link.lastFaultCode;
+    gLastRxSeq = link.lastRxSeq;
+    gLastStatusRxMs = link.lastStatusRxMs;
 }
 } // namespace
 
