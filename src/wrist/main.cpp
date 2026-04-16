@@ -4,6 +4,7 @@
 #include "stratagem_engine.h"
 #include "launcher_link.h"
 #include "config_shared.h"
+#include "diag_ui.h"
 
 // ─── Runtime state ────────────────────────────────────────────────────────────
 static StratagemEngineState gEngine;
@@ -98,9 +99,9 @@ void setup() {
     // Init launcher link (registers peer + recv callback)
     launcher_link_init(gLink);
 
-    // TODO: init display driver
-    // TODO: init touch driver
-    // TODO: init LVGL and build screens
+    // Init minimum diagnostics UI for bench bring-up
+    diag_ui_init(expectedLauncherMac);
+
     // TODO: init battery monitor ADC
 
     Serial.println("[WRIST] Ready");
@@ -114,7 +115,19 @@ void loop() {
     // ── 1. Service ESP-NOW comms ──────────────────────────────────────────────
     launcher_link_tick(gLink, now);
 
-    // ── 1b. Temporary serial debug console for bench testing ─────────────────
+    // ── 1b. Minimum diagnostics UI + action handling ────────────────────────
+    diag_ui_tick(gLink, now);
+
+    DiagUiAction uiAction = diag_ui_takeAction();
+    if (uiAction == DiagUiAction::ARM) {
+        Serial.println("[WRIST] UI action: ARM");
+        launcher_link_sendArmSet(gLink, true);
+    } else if (uiAction == DiagUiAction::DISARM) {
+        Serial.println("[WRIST] UI action: DISARM");
+        launcher_link_sendArmSet(gLink, false);
+    }
+
+    // ── 1c. Temporary serial debug console for bench testing ─────────────────
     handleSerialConsole();
 
     // ── 2. Detect DISARMED→ARMED transition ──────────────────────────────────
@@ -161,15 +174,9 @@ void loop() {
         stratagemEngine_reset(gEngine);
     }
 
-    // ── 5. TODO: service LVGL tick ────────────────────────────────────────────
-    // lv_timer_handler();
-
-    // ── 6. TODO: service touch input ─────────────────────────────────────────
-    // serviceTouchInput(now);
-
-    // ── 7. TODO: service battery monitor ─────────────────────────────────────
+    // ── 5. TODO: service battery monitor ─────────────────────────────────────
     // batteryMonitor_tick(now);
 
-    // ── 8. TODO: service power manager ───────────────────────────────────────
+    // ── 6. TODO: service power manager ───────────────────────────────────────
     // powerManager_tick(now);
 }

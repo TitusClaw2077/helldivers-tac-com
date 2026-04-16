@@ -35,7 +35,8 @@ static void applyStatusPayload(LauncherLinkState& ls, const StatusPayload& p, ui
     ls.remoteState    = (LauncherSafetyState)p.launcherState;
     ls.lastEvent      = (LauncherEvent)p.lastEvent;
     ls.lastFaultCode  = (FaultCode)p.faultCode;
-    ls.continuityOk   = (p.continuityState == (uint8_t)ContinuityState::PRESENT);
+    ls.continuityState = (ContinuityState)p.continuityState;
+    ls.continuityOk   = (ls.continuityState == ContinuityState::PRESENT);
     ls.keySwitchOn    = (p.keySwitchOn != 0);
     ls.firePermitted  = (p.canFire != 0);
     ls.batteryPct     = p.batteryPct;
@@ -103,6 +104,7 @@ void launcher_link_init(LauncherLinkState& state) {
     memset(&state, 0, sizeof(state));
     state.remoteState = LauncherSafetyState::BOOTING;
     state.lastEvent   = LauncherEvent::NONE;
+    state.continuityState = ContinuityState::UNKNOWN;
 
     s_link = &state;
 

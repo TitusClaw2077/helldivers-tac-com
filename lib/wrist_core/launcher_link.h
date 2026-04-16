@@ -10,6 +10,7 @@ struct LauncherLinkState {
     bool    online;
     bool    armed;
     bool    continuityOk;
+    ContinuityState continuityState;
     bool    keySwitchOn;
     bool    firePermitted;
     uint8_t batteryPct;
