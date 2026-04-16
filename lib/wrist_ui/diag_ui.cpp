@@ -396,8 +396,11 @@ void diag_ui_init(const uint8_t launcherMac[6]) {
     gDisplay.setCursor(20, 48);
     gDisplay.println("Display init OK");
 
-    SPI.begin(TFT_SCLK, TFT_MISO, TFT_MOSI, TOUCH_CS);
+    // XPT2046_Touchscreen::begin() calls SPI.begin() with default board pins,
+    // which breaks the CrowPanel's custom SPI wiring on ESP32. Let it set up
+    // CS first, then immediately restore the CrowPanel SPI pin mapping.
     gTouch.begin();
+    SPI.begin(TFT_SCLK, TFT_MISO, TFT_MOSI, TOUCH_CS);
     gTouch.setRotation(SCREEN_ROTATION);
     gTouchReady = true;
     Serial.println("[WRIST/UI] Display init OK");
