@@ -121,6 +121,7 @@ DiagUiAction gPendingAction = DiagUiAction::NONE;
 bool gTouchReady = false;
 bool gTouchWasDown = false;
 uint32_t gLastDrawMs = 0;
+uint32_t gLastAgeDrawMs = 0;
 uint16_t gLastRxSeq = 0xFFFF;
 uint32_t gLastStatusRxMs = 0xFFFFFFFF;
 bool gLastOnline = false;
@@ -134,6 +135,8 @@ uint8_t gLauncherMac[6] = {0};
 
 const Rect kArmButton    = { 20, 248, 210, 56 };
 const Rect kDisarmButton = { 250, 248, 210, 56 };
+const Rect kArmTouchZone    = { 0, 220, SCREEN_W / 2, SCREEN_H - 220 };
+const Rect kDisarmTouchZone = { SCREEN_W / 2, 220, SCREEN_W / 2, SCREEN_H - 220 };
 
 const char* yesNo(bool v) {
     return v ? "YES" : "NO";
@@ -221,6 +224,26 @@ void drawButton(const Rect& r, const char* label, uint16_t fill) {
     gDisplay.setTextDatum(textdatum_t::top_left);
 }
 
+void formatStatusAge(const LauncherLinkState& link, uint32_t now, char* out, size_t outSize) {
+    if (!link.online || link.lastStatusRxMs == 0 || link.lastStatusRxMs > now) {
+        snprintf(out, outSize, "--");
+        return;
+    }
+
+    unsigned long ageSeconds = (unsigned long)((now - link.lastStatusRxMs) / 1000UL);
+    snprintf(out, outSize, "%lus", ageSeconds);
+}
+
+void drawStatusAgeRow(const LauncherLinkState& link, uint32_t now) {
+    char ageBuf[24];
+    formatStatusAge(link, now, ageBuf, sizeof(ageBuf));
+
+    gDisplay.startWrite();
+    gDisplay.fillRect(0, 228, SCREEN_W, 24, UI_BG);
+    drawLabelValue(232, "STATUS AGE", ageBuf);
+    gDisplay.endWrite();
+}
+
 void drawFrame(const LauncherLinkState& link, uint32_t now) {
     gDisplay.startWrite();
     gDisplay.fillScreen(UI_BG);
@@ -246,11 +269,7 @@ void drawFrame(const LauncherLinkState& link, uint32_t now) {
     drawLabelValue(208, "FAULT", faultName(link.lastFaultCode), link.lastFaultCode == FaultCode::NONE ? UI_TEXT : UI_FAULT);
 
     char ageBuf[24];
-    if (!link.online || link.lastStatusRxMs == 0) {
-        snprintf(ageBuf, sizeof(ageBuf), "--");
-    } else {
-        snprintf(ageBuf, sizeof(ageBuf), "%lus", (unsigned long)((now - link.lastStatusRxMs) / 1000));
-    }
+    formatStatusAge(link, now, ageBuf, sizeof(ageBuf));
     drawLabelValue(232, "STATUS AGE", ageBuf);
 
     drawButton(kArmButton, "ARM", UI_BTN_ARM);
@@ -286,24 +305,28 @@ void serviceTouch() {
     int16_t x = 0;
     int16_t y = 0;
     bool valid = mapTouchPoint(p, x, y);
-    if (!gTouchWasDown) {
+    bool isNewTouch = !gTouchWasDown;
+    if (isNewTouch) {
         Serial.printf("[WRIST/UI] touch raw=(%d,%d,%d) mapped=(%d,%d) valid=%d\n", p.x, p.y, p.z, x, y, valid);
     }
     gTouchWasDown = true;
 
     if (!valid) return;
 
-    if (kArmButton.contains(x, y)) {
+    if (!isNewTouch) return;
+
+    if (kArmTouchZone.contains(x, y)) {
         gPendingAction = DiagUiAction::ARM;
         Serial.println("[WRIST/UI] ARM button pressed");
-    } else if (kDisarmButton.contains(x, y)) {
+    } else if (kDisarmTouchZone.contains(x, y)) {
         gPendingAction = DiagUiAction::DISARM;
         Serial.println("[WRIST/UI] DISARM button pressed");
+    } else {
+        Serial.println("[WRIST/UI] touch missed action zones");
     }
 }
 
 bool shouldRedraw(const LauncherLinkState& link, uint32_t now) {
-    if (now - gLastDrawMs > 500) return true;
     if (link.lastRxSeq != gLastRxSeq) return true;
     if (link.lastStatusRxMs != gLastStatusRxMs) return true;
     if (link.online != gLastOnline) return true;
@@ -365,6 +388,10 @@ void diag_ui_tick(const LauncherLinkState& link, uint32_t now) {
     if (shouldRedraw(link, now)) {
         drawFrame(link, now);
         rememberState(link, now);
+        gLastAgeDrawMs = now;
+    } else if (now - gLastAgeDrawMs >= 1000) {
+        drawStatusAgeRow(link, now);
+        gLastAgeDrawMs = now;
     }
 }
 

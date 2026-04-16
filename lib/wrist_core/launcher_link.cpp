@@ -30,7 +30,6 @@ static void fillHeader(PacketHeader& hdr,
 }
 
 static void applyStatusPayload(LauncherLinkState& ls, const StatusPayload& p, uint32_t now) {
-    ls.online         = true;
     ls.lastStatusRxMs = now;
     ls.remoteState    = (LauncherSafetyState)p.launcherState;
     ls.lastEvent      = (LauncherEvent)p.lastEvent;
@@ -42,6 +41,7 @@ static void applyStatusPayload(LauncherLinkState& ls, const StatusPayload& p, ui
     ls.batteryPct     = p.batteryPct;
     ls.linkQuality    = p.linkQuality;
     ls.armed          = (ls.remoteState == LauncherSafetyState::ARMED);
+    ls.online         = true;
 }
 
 // ─── ESP-NOW receive callback (called from ISR/radio task context) ────────────
