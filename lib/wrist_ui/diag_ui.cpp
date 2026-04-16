@@ -139,8 +139,10 @@ uint8_t gLauncherMac[6] = {0};
 
 const Rect kArmButton    = { 20, 248, 210, 56 };
 const Rect kDisarmButton = { 250, 248, 210, 56 };
-const Rect kArmTouchZone    = { 0, 220, SCREEN_W / 2, SCREEN_H - 220 };
-const Rect kDisarmTouchZone = { SCREEN_W / 2, 220, SCREEN_W / 2, SCREEN_H - 220 };
+// Slightly expand touch targets around the visible buttons for easier bench use
+// while still keeping the action zones aligned to the rendered UI.
+const Rect kArmTouchZone    = { 12, 240, 226, 68 };
+const Rect kDisarmTouchZone = { 242, 240, 226, 68 };
 
 const char* yesNo(bool v) {
     return v ? "YES" : "NO";
