@@ -8,7 +8,7 @@
 
 namespace {
 #ifndef CROWPANEL_REV_V22
-#define CROWPANEL_REV_V22 0
+#define CROWPANEL_REV_V22 1
 #endif
 
 constexpr int TFT_MOSI = 13;
