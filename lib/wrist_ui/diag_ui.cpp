@@ -36,6 +36,7 @@ constexpr int TOUCH_RAW_MAX_X = 3900;
 constexpr int TOUCH_RAW_MIN_Y = 200;
 constexpr int TOUCH_RAW_MAX_Y = 3900;
 constexpr int TOUCH_MIN_Z     = 200;
+constexpr int TOUCH_MAX_Z     = 4000;
 
 constexpr uint16_t UI_BG      = 0x0000;
 constexpr uint16_t UI_TEXT    = 0xFFFF;
@@ -120,6 +121,9 @@ XPT2046_Touchscreen gTouch(TOUCH_CS);
 DiagUiAction gPendingAction = DiagUiAction::NONE;
 bool gTouchReady = false;
 bool gTouchWasDown = false;
+uint32_t gLastTouchLogMs = 0;
+int16_t gLastTouchX = -1;
+int16_t gLastTouchY = -1;
 uint32_t gLastDrawMs = 0;
 uint32_t gLastAgeDrawMs = 0;
 uint16_t gLastRxSeq = 0xFFFF;
@@ -239,7 +243,7 @@ void drawStatusAgeRow(const LauncherLinkState& link, uint32_t now) {
     formatStatusAge(link, now, ageBuf, sizeof(ageBuf));
 
     gDisplay.startWrite();
-    gDisplay.fillRect(0, 228, SCREEN_W, 24, UI_BG);
+    gDisplay.fillRect(160, 232, 120, 16, UI_BG);
     drawLabelValue(232, "STATUS AGE", ageBuf);
     gDisplay.endWrite();
 }
@@ -279,6 +283,13 @@ void drawFrame(const LauncherLinkState& link, uint32_t now) {
 
 bool mapTouchPoint(const TS_Point& p, int16_t& outX, int16_t& outY) {
     if (p.z < TOUCH_MIN_Z) return false;
+    if (p.z >= TOUCH_MAX_Z) return false;
+    if (p.x == 0 && p.y == 0) return false;
+
+    if (p.x < TOUCH_RAW_MIN_X || p.x > TOUCH_RAW_MAX_X ||
+        p.y < TOUCH_RAW_MIN_Y || p.y > TOUCH_RAW_MAX_Y) {
+        return false;
+    }
 
     // For this landscape layout, raw Y usually maps best to screen X and raw X
     // maps inversely to screen Y on ILI9488 + XPT2046 boards.
@@ -297,7 +308,12 @@ void serviceTouch() {
 
     bool touching = gTouch.touched();
     if (!touching) {
+        if (gTouchWasDown) {
+            Serial.println("[WRIST/UI] touch released");
+        }
         gTouchWasDown = false;
+        gLastTouchX = -1;
+        gLastTouchY = -1;
         return;
     }
 
@@ -306,10 +322,16 @@ void serviceTouch() {
     int16_t y = 0;
     bool valid = mapTouchPoint(p, x, y);
     bool isNewTouch = !gTouchWasDown;
-    if (isNewTouch) {
+    bool moved = (x != gLastTouchX) || (y != gLastTouchY);
+    bool logDue = (millis() - gLastTouchLogMs) >= 150;
+
+    if (isNewTouch || moved || logDue) {
         Serial.printf("[WRIST/UI] touch raw=(%d,%d,%d) mapped=(%d,%d) valid=%d\n", p.x, p.y, p.z, x, y, valid);
+        gLastTouchLogMs = millis();
     }
     gTouchWasDown = true;
+    gLastTouchX = x;
+    gLastTouchY = y;
 
     if (!valid) return;
 
@@ -317,10 +339,10 @@ void serviceTouch() {
 
     if (kArmTouchZone.contains(x, y)) {
         gPendingAction = DiagUiAction::ARM;
-        Serial.println("[WRIST/UI] ARM button pressed");
+        Serial.println("[WRIST/UI] ARM zone pressed");
     } else if (kDisarmTouchZone.contains(x, y)) {
         gPendingAction = DiagUiAction::DISARM;
-        Serial.println("[WRIST/UI] DISARM button pressed");
+        Serial.println("[WRIST/UI] DISARM zone pressed");
     } else {
         Serial.println("[WRIST/UI] touch missed action zones");
     }
