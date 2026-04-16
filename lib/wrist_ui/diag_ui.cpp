@@ -293,10 +293,12 @@ bool mapTouchPoint(const TS_Point& p, int16_t& outX, int16_t& outY) {
         return false;
     }
 
-    // For this landscape layout, raw Y usually maps best to screen X and raw X
-    // maps inversely to screen Y on ILI9488 + XPT2046 boards.
-    long sx = map(p.y, TOUCH_RAW_MIN_Y, TOUCH_RAW_MAX_Y, 0, SCREEN_W - 1);
-    long sy = map(p.x, TOUCH_RAW_MAX_X, TOUCH_RAW_MIN_X, 0, SCREEN_H - 1);
+    // Bench trace from the actual CrowPanel showed a left-to-right swipe across
+    // the ARM button changing raw X heavily while raw Y stayed nearly fixed.
+    // That means the previous swap was wrong for this unit. Use each raw axis
+    // directly, with both axes inverted for the current panel orientation.
+    long sx = map(p.x, TOUCH_RAW_MAX_X, TOUCH_RAW_MIN_X, 0, SCREEN_W - 1);
+    long sy = map(p.y, TOUCH_RAW_MAX_Y, TOUCH_RAW_MIN_Y, 0, SCREEN_H - 1);
 
     sx = constrain(sx, 0, SCREEN_W - 1);
     sy = constrain(sy, 0, SCREEN_H - 1);
