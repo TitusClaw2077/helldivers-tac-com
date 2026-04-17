@@ -121,7 +121,6 @@ XPT2046_Touchscreen gTouch(TOUCH_CS);
 DiagUiAction gPendingAction = DiagUiAction::NONE;
 bool gTouchReady = false;
 bool gTouchWasDown = false;
-uint32_t gLastTouchLogMs = 0;
 int16_t gLastTouchX = -1;
 int16_t gLastTouchY = -1;
 uint32_t gLastDrawMs = 0;
@@ -312,9 +311,6 @@ void serviceTouch() {
 
     bool touching = gTouch.touched();
     if (!touching) {
-        if (gTouchWasDown) {
-            Serial.println("[WRIST/UI] touch released");
-        }
         gTouchWasDown = false;
         gLastTouchX = -1;
         gLastTouchY = -1;
@@ -326,13 +322,7 @@ void serviceTouch() {
     int16_t y = 0;
     bool valid = mapTouchPoint(p, x, y);
     bool isNewTouch = !gTouchWasDown;
-    bool moved = (x != gLastTouchX) || (y != gLastTouchY);
-    bool logDue = (millis() - gLastTouchLogMs) >= 150;
 
-    if (isNewTouch || moved || logDue) {
-        Serial.printf("[WRIST/UI] touch raw=(%d,%d,%d) mapped=(%d,%d) valid=%d\n", p.x, p.y, p.z, x, y, valid);
-        gLastTouchLogMs = millis();
-    }
     gTouchWasDown = true;
     gLastTouchX = x;
     gLastTouchY = y;
@@ -347,8 +337,6 @@ void serviceTouch() {
     } else if (kDisarmTouchZone.contains(x, y)) {
         gPendingAction = DiagUiAction::DISARM;
         Serial.println("[WRIST/UI] DISARM zone pressed");
-    } else {
-        Serial.println("[WRIST/UI] touch missed action zones");
     }
 }
 

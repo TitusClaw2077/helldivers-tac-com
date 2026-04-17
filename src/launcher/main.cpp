@@ -4,6 +4,7 @@
 #include "launcher_state.h"
 #include "radio_link.h"
 #include "igniter_driver.h"
+#include "output_indicator.h"
 #include "continuity.h"
 #include "config_shared.h"
 
@@ -29,12 +30,12 @@ static void printMac(const char* label, const uint8_t* mac) {
                   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
-// ─── Ignition complete callback ──────────────────────────────────────────────
-static void onIgnitionComplete() {
+// ─── Output checkpoint complete callback ────────────────────────────────────
+static void onOutputIndicatorComplete() {
     launcherState_onIgnitionComplete(gState);
-    Serial.println("[LAUNCHER] Ignition pulse complete → FIRED");
+    Serial.println("[LAUNCHER] Output indicator pulse complete → FIRED");
 
-    // Send FIRE_ACK now that pulse is done
+    // Send FIRE_ACK now that the harmless checkpoint pulse is done
     if (gFireAckPending) {
         radio_link_sendFireAck(gState,
                                gPendingFireToken,
@@ -55,7 +56,12 @@ void setup() {
     // ── Ignition GPIO must go LOW first ─────────────────────────────────────
     igniter_init(PIN_IGNITION_GATE);
     igniter_forceOff();
-    igniter_onComplete = onIgnitionComplete;
+    output_indicator_init(PIN_OUTPUT_LED_RED);
+    output_indicator_forceOff();
+    output_indicator_onComplete = onOutputIndicatorComplete;
+    Serial.printf("[LAUNCHER] Output checkpoint mode: red LED on pin %d, ignition gate held LOW on pin %d\n",
+                  PIN_OUTPUT_LED_RED,
+                  PIN_IGNITION_GATE);
 
     // ── Interlock switch input ───────────────────────────────────────────────
     pinMode(PIN_ARM_SENSE, INPUT);
@@ -110,8 +116,9 @@ void loop() {
 
     continuity_setMonitoringEnabled(gState.keySwitchOn);
 
-    // ── 3. Service ignition pulse ─────────────────────────────────────────────
-    igniter_service(now);
+    // ── 3. Service harmless output checkpoint pulse ──────────────────────────
+    output_indicator_service(now);
+    igniter_forceOff();
 
     // ── 4. State machine tick ─────────────────────────────────────────────────
     launcherState_tick(gState, now);
@@ -143,9 +150,11 @@ void loop() {
         launcherState_onFireCmd(gState, cmd.requestToken);
 
         if (gState.state == LauncherSafetyState::FIRING) {
-            // State machine accepted the fire command — start ignition pulse
-            igniter_startPulse(IGNITION_PULSE_DURATION_MS);
-            Serial.println("[LAUNCHER] Ignition pulse started");
+            // State machine accepted the fire command — use the staged LED-only
+            // checkpoint instead of touching the MOSFET / igniter path.
+            output_indicator_startPulse(OUTPUT_INDICATOR_PULSE_DURATION_MS);
+            Serial.printf("[LAUNCHER] Output indicator pulse started on pin %d\n",
+                          PIN_OUTPUT_LED_RED);
         } else {
             // Fire was rejected — send immediate FIRE_ACK with rejected status
             // and a STATUS to update the wrist
