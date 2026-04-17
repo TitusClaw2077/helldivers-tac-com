@@ -15,8 +15,26 @@ static bool gWasArmed = false;
 
 // Request token counter for fire commands
 static uint32_t gFireToken = 0;
+static bool gFireCommandInFlight = false;
+
+static void updateFireLockout() {
+    if (!gFireCommandInFlight) return;
+
+    if (!gLink.online ||
+        gLink.remoteState == LauncherSafetyState::FIRED ||
+        gLink.remoteState == LauncherSafetyState::DISARMED ||
+        gLink.remoteState == LauncherSafetyState::FAULT) {
+        gFireCommandInFlight = false;
+        Serial.println("[WRIST] Fire lockout cleared");
+    }
+}
 
 static void sendFireCommand(const char* source, uint32_t matchedAtMs) {
+    if (gFireCommandInFlight) {
+        Serial.printf("[WRIST] %s fire ignored — command already in flight\n", source);
+        return;
+    }
+
     if (gLink.online && gLink.armed && gLink.continuityOk) {
         gFireToken++;
         uint8_t sid = gEngine.active.def ? gEngine.active.def->id : 0;
@@ -32,6 +50,7 @@ static void sendFireCommand(const char* source, uint32_t matchedAtMs) {
                                   slen,
                                   gFireToken,
                                   matchedAtMs);
+        gFireCommandInFlight = true;
     } else {
         Serial.printf("[WRIST] %s fire blocked — launcher not ready\n", source);
     }
@@ -137,6 +156,7 @@ void loop() {
 
     // ── 1. Service ESP-NOW comms ──────────────────────────────────────────────
     launcher_link_tick(gLink, now);
+    updateFireLockout();
 
     // ── 1b. Minimum diagnostics UI + action handling ────────────────────────
     diag_ui_tick(gLink, now);
