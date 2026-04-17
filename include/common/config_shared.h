@@ -14,7 +14,7 @@
 #define STATUS_BROADCAST_INTERVAL_MS 1000  // launcher periodic status push
 
 // ─── Output checkpoint / ignition timing ─────────────────────────────────────
-#define OUTPUT_INDICATOR_PULSE_DURATION_MS 1000  // harmless red LED checkpoint pulse
+#define OUTPUT_INDICATOR_PULSE_DURATION_MS 5000  // harmless red LED checkpoint pulse (extended for bench visibility)
 #define IGNITION_PULSE_DURATION_MS         1000  // default MOSFET on-time
 #define POST_FIRE_COOLDOWN_MS              2000  // time in FIRED state before DISARMED
 
