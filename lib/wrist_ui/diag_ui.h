@@ -6,7 +6,8 @@
 enum class DiagUiAction : uint8_t {
     NONE = 0,
     ARM,
-    DISARM
+    DISARM,
+    FIRE
 };
 
 void diag_ui_init(const uint8_t launcherMac[6]);

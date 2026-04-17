@@ -16,6 +16,27 @@ static bool gWasArmed = false;
 // Request token counter for fire commands
 static uint32_t gFireToken = 0;
 
+static void sendFireCommand(const char* source, uint32_t matchedAtMs) {
+    if (gLink.online && gLink.armed && gLink.continuityOk) {
+        gFireToken++;
+        uint8_t sid = gEngine.active.def ? gEngine.active.def->id : 0;
+        uint8_t slen = gEngine.active.def ? gEngine.active.def->length : 0;
+
+        Serial.printf("[WRIST] %s sending FIRE_CMD id=%u token=%lu\n",
+                      source,
+                      sid,
+                      (unsigned long)gFireToken);
+
+        launcher_link_sendFireCmd(gLink,
+                                  sid,
+                                  slen,
+                                  gFireToken,
+                                  matchedAtMs);
+    } else {
+        Serial.printf("[WRIST] %s fire blocked — launcher not ready\n", source);
+    }
+}
+
 static const char* stateName(LauncherSafetyState state) {
     switch (state) {
         case LauncherSafetyState::BOOTING:   return "BOOTING";
@@ -55,13 +76,15 @@ static void handleSerialConsole() {
     } else if (cmd == "disarm") {
         Serial.println("[WRIST] Serial command: DISARM");
         launcher_link_sendArmSet(gLink, false);
+    } else if (cmd == "fire") {
+        sendFireCommand("Serial command", millis());
     } else if (cmd == "status") {
         printLinkStatus();
     } else if (cmd == "help" || cmd == "?") {
-        Serial.println("[WRIST] Serial commands: arm, disarm, status, help");
+        Serial.println("[WRIST] Serial commands: arm, disarm, fire, status, help");
     } else {
         Serial.printf("[WRIST] Unknown serial command: %s\n", cmd.c_str());
-        Serial.println("[WRIST] Serial commands: arm, disarm, status, help");
+        Serial.println("[WRIST] Serial commands: arm, disarm, fire, status, help");
     }
 }
 
@@ -105,7 +128,7 @@ void setup() {
     // TODO: init battery monitor ADC
 
     Serial.println("[WRIST] Ready");
-    Serial.println("[WRIST] Serial commands: arm, disarm, status, help");
+    Serial.println("[WRIST] Serial commands: arm, disarm, fire, status, help");
 }
 
 // ─── Main loop ───────────────────────────────────────────────────────────────
@@ -125,6 +148,9 @@ void loop() {
     } else if (uiAction == DiagUiAction::DISARM) {
         Serial.println("[WRIST] UI action: DISARM");
         launcher_link_sendArmSet(gLink, false);
+    } else if (uiAction == DiagUiAction::FIRE) {
+        Serial.println("[WRIST] UI action: FIRE");
+        sendFireCommand("UI action", millis());
     }
 
     // ── 1c. Temporary serial debug console for bench testing ─────────────────
@@ -152,23 +178,7 @@ void loop() {
 
     // ── 4. Check fire-ready condition ─────────────────────────────────────────
     if (stratagemEngine_readyToFire(gEngine)) {
-        // Final safety gate: launcher must still be armed and online
-        if (gLink.online && gLink.armed && gLink.continuityOk) {
-            gFireToken++;
-            uint8_t sid = gEngine.active.def ? gEngine.active.def->id : 0;
-            uint8_t slen = gEngine.active.def ? gEngine.active.def->length : 0;
-
-            Serial.printf("[WRIST] Sending FIRE_CMD id=%u token=%lu\n",
-                          sid, (unsigned long)gFireToken);
-
-            launcher_link_sendFireCmd(gLink,
-                                      sid,
-                                      slen,
-                                      gFireToken,
-                                      gEngine.matchedAtMs);
-        } else {
-            Serial.println("[WRIST] Fire blocked — launcher not ready");
-        }
+        sendFireCommand("Stratagem engine", gEngine.matchedAtMs);
 
         // Always reset engine after fire attempt regardless of outcome
         stratagemEngine_reset(gEngine);

@@ -46,6 +46,8 @@ constexpr uint16_t UI_WARN    = 0xFD20;
 constexpr uint16_t UI_FAULT   = 0xF800;
 constexpr uint16_t UI_BTN_ARM = 0x05E0;
 constexpr uint16_t UI_BTN_DIS = 0xC800;
+constexpr uint16_t UI_BTN_FIRE = 0xF800;
+constexpr uint16_t UI_BTN_DISABLED = 0x4208;
 
 struct Rect {
     int16_t x;
@@ -131,15 +133,18 @@ bool gLastOnline = false;
 bool gLastArmed = false;
 bool gLastKey = false;
 bool gLastContinuityOk = false;
+bool gLastFirePermitted = false;
 LauncherSafetyState gLastState = LauncherSafetyState::BOOTING;
 LauncherEvent gLastEvent = LauncherEvent::NONE;
 FaultCode gLastFault = FaultCode::NONE;
 uint8_t gLauncherMac[6] = {0};
 
+const Rect kFireButton   = { 396, 8, 72, 72 };
 const Rect kArmButton    = { 20, 248, 210, 56 };
 const Rect kDisarmButton = { 250, 248, 210, 56 };
 // Slightly expand touch targets around the visible buttons for easier bench use
 // while still keeping the action zones aligned to the rendered UI.
+const Rect kFireTouchZone   = { 388, 4, 84, 84 };
 const Rect kArmTouchZone    = { 12, 240, 226, 68 };
 const Rect kDisarmTouchZone = { 242, 240, 226, 68 };
 
@@ -249,6 +254,10 @@ void drawStatusAgeRow(const LauncherLinkState& link, uint32_t now) {
     gDisplay.endWrite();
 }
 
+uint16_t fireButtonColor(const LauncherLinkState& link) {
+    return link.firePermitted ? UI_BTN_FIRE : UI_BTN_DISABLED;
+}
+
 void drawFrame(const LauncherLinkState& link, uint32_t now) {
     gDisplay.startWrite();
     gDisplay.fillScreen(UI_BG);
@@ -256,6 +265,8 @@ void drawFrame(const LauncherLinkState& link, uint32_t now) {
     gDisplay.setTextColor(UI_TEXT, UI_BG);
     gDisplay.setCursor(20, 14);
     gDisplay.print("TACTICAL LINK DIAGNOSTICS");
+
+    drawButton(kFireButton, "FIRE", fireButtonColor(link));
 
     char macBuf[24];
     snprintf(macBuf, sizeof(macBuf), "%02X:%02X:%02X:%02X:%02X:%02X",
@@ -331,7 +342,10 @@ void serviceTouch() {
 
     if (!isNewTouch) return;
 
-    if (kArmTouchZone.contains(x, y)) {
+    if (kFireTouchZone.contains(x, y)) {
+        gPendingAction = DiagUiAction::FIRE;
+        Serial.println("[WRIST/UI] FIRE zone pressed");
+    } else if (kArmTouchZone.contains(x, y)) {
         gPendingAction = DiagUiAction::ARM;
         Serial.println("[WRIST/UI] ARM zone pressed");
     } else if (kDisarmTouchZone.contains(x, y)) {
@@ -345,6 +359,7 @@ bool shouldRedraw(const LauncherLinkState& link, uint32_t now) {
     if (link.armed != gLastArmed) return true;
     if (link.keySwitchOn != gLastKey) return true;
     if (link.continuityOk != gLastContinuityOk) return true;
+    if (link.firePermitted != gLastFirePermitted) return true;
     if (link.remoteState != gLastState) return true;
     if (link.lastEvent != gLastEvent) return true;
     if (link.lastFaultCode != gLastFault) return true;
@@ -357,6 +372,7 @@ void rememberState(const LauncherLinkState& link, uint32_t now) {
     gLastArmed = link.armed;
     gLastKey = link.keySwitchOn;
     gLastContinuityOk = link.continuityOk;
+    gLastFirePermitted = link.firePermitted;
     gLastState = link.remoteState;
     gLastEvent = link.lastEvent;
     gLastFault = link.lastFaultCode;
