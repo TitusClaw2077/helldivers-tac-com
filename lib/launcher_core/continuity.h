@@ -14,6 +14,11 @@ void continuity_init();
 // back to UNKNOWN so SAFE/unarmed conditions do not masquerade as faults.
 void continuity_setMonitoringEnabled(bool enabled);
 
+// Temporarily suppress live sampling while preserving the last classified state.
+// Use this during the active output pulse so the load path does not get
+// reinterpreted as a continuity fault mid-fire.
+void continuity_setSamplingSuppressed(bool suppressed);
+
 // Sample/classify continuity state at the configured interval.
 void continuity_tick(uint32_t now);
 

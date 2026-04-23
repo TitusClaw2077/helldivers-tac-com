@@ -17,6 +17,7 @@ ContinuityState s_state = ContinuityState::UNKNOWN;
 uint16_t s_rawAverage = 0;
 uint32_t s_lastSampleMs = 0;
 bool s_monitoringEnabled = false;
+bool s_samplingSuppressed = false;
 
 const char* continuityStateName(ContinuityState state) {
     switch (state) {
@@ -67,6 +68,7 @@ void continuity_setMonitoringEnabled(bool enabled) {
 
     s_monitoringEnabled = enabled;
     if (!enabled) {
+        s_samplingSuppressed = false;
         s_state = ContinuityState::UNKNOWN;
         s_rawAverage = 0;
         Serial.println("[LAUNCHER/cont] Monitoring disabled -> state=UNKNOWN");
@@ -75,8 +77,22 @@ void continuity_setMonitoringEnabled(bool enabled) {
     }
 }
 
+void continuity_setSamplingSuppressed(bool suppressed) {
+    if (s_samplingSuppressed == suppressed) {
+        return;
+    }
+
+    s_samplingSuppressed = suppressed;
+    if (suppressed) {
+        Serial.println("[LAUNCHER/cont] Sampling suppressed during active fire pulse");
+    } else {
+        Serial.println("[LAUNCHER/cont] Sampling resumed after active fire pulse");
+        s_lastSampleMs = 0;
+    }
+}
+
 void continuity_tick(uint32_t now) {
-    if (!s_monitoringEnabled) {
+    if (!s_monitoringEnabled || s_samplingSuppressed) {
         return;
     }
 

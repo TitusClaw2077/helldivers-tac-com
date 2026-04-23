@@ -119,6 +119,7 @@ void loop() {
 
     // ── 3. Service active MOSFET dummy-load pulse path ──────────────────────
     igniter_service(now);
+    continuity_setSamplingSuppressed(igniter_isActive() || gState.state == LauncherSafetyState::FIRING);
     output_indicator_forceOff();
 
     // ── 4. State machine tick ─────────────────────────────────────────────────
