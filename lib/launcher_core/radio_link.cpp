@@ -18,6 +18,7 @@ static uint16_t s_txSeq = 0;
 // At 2-second heartbeat rate this is safe in normal operation.
 static volatile PendingArmCmd  s_pendingArm  = {};
 static volatile PendingFireCmd s_pendingFire = {};
+static portMUX_TYPE s_pendingMux = portMUX_INITIALIZER_UNLOCKED;
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -81,25 +82,28 @@ static void onRecv(const uint8_t* mac, const uint8_t* data, int len) {
     else if (mt == MessageType::ARM_SET) {
         if (len != (int)sizeof(ArmSetPacket)) return;
         const ArmSetPacket* pkt = reinterpret_cast<const ArmSetPacket*>(data);
-        // Overwrite any unprocessed arm command
-        s_pendingArm.valid        = true;
+        portENTER_CRITICAL(&s_pendingMux);
         s_pendingArm.arm          = (pkt->payload.arm != 0);
         s_pendingArm.seq          = hdr->seq;
         s_pendingArm.token        = pkt->payload.requestToken;
         s_pendingArm.receivedAtMs = now;
+        s_pendingArm.valid        = true;
+        portEXIT_CRITICAL(&s_pendingMux);
         Serial.printf("[LAUNCHER/radio] ARM_SET rx arm=%d seq=%u\n",
                       pkt->payload.arm, hdr->seq);
     }
     else if (mt == MessageType::FIRE_CMD) {
         if (len != (int)sizeof(FireCmdPacket)) return;
         const FireCmdPacket* pkt = reinterpret_cast<const FireCmdPacket*>(data);
-        s_pendingFire.valid        = true;
+        portENTER_CRITICAL(&s_pendingMux);
         s_pendingFire.stratagemId  = pkt->payload.stratagemId;
         s_pendingFire.inputLength  = pkt->payload.inputLength;
         s_pendingFire.seq          = hdr->seq;
         s_pendingFire.requestToken = pkt->payload.requestToken;
         s_pendingFire.matchedAtMs  = pkt->payload.matchedAtMs;
         s_pendingFire.receivedAtMs = now;
+        s_pendingFire.valid        = true;
+        portEXIT_CRITICAL(&s_pendingMux);
         Serial.printf("[LAUNCHER/radio] FIRE_CMD rx id=%u token=%lu seq=%u\n",
                       pkt->payload.stratagemId,
                       (unsigned long)pkt->payload.requestToken,
@@ -192,25 +196,20 @@ void radio_link_sendFireAck(const LauncherRuntimeState& ls,
 
 // ─── Pending command accessors ────────────────────────────────────────────────
 
-bool radio_link_hasPendingArm() {
-    return s_pendingArm.valid;
-}
-
-bool radio_link_getPendingArm() {
-    return s_pendingArm.arm;
-}
-
-void radio_link_consumePendingArm() {
+PendingArmCmd radio_link_consumePendingArm() {
+    PendingArmCmd copy = {};
+    portENTER_CRITICAL(&s_pendingMux);
+    memcpy(&copy, (const void*)&s_pendingArm, sizeof(copy));
     s_pendingArm.valid = false;
-}
-
-bool radio_link_hasPendingFire() {
-    return s_pendingFire.valid;
+    portEXIT_CRITICAL(&s_pendingMux);
+    return copy;
 }
 
 PendingFireCmd radio_link_consumePendingFire() {
-    PendingFireCmd copy;
-    memcpy(&copy, (void*)&s_pendingFire, sizeof(copy));
+    PendingFireCmd copy = {};
+    portENTER_CRITICAL(&s_pendingMux);
+    memcpy(&copy, (const void*)&s_pendingFire, sizeof(copy));
     s_pendingFire.valid = false;
+    portEXIT_CRITICAL(&s_pendingMux);
     return copy;
 }

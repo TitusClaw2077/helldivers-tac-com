@@ -42,9 +42,5 @@ void radio_link_sendFireAck(const LauncherRuntimeState& ls,
                              uint32_t firedAtMs);
 
 // ─── Pending command accessors ────────────────────────────────────────────────
-bool radio_link_hasPendingArm();
-bool radio_link_getPendingArm();       // returns arm flag (true=arm, false=disarm)
-void radio_link_consumePendingArm();   // clear after processing
-
-bool radio_link_hasPendingFire();
+PendingArmCmd  radio_link_consumePendingArm();   // returns copy then clears
 PendingFireCmd radio_link_consumePendingFire();  // returns copy then clears

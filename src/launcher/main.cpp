@@ -126,20 +126,18 @@ void loop() {
     launcherState_tick(gState, now);
 
     // ── 5. Process pending ARM command ────────────────────────────────────────
-    if (radio_link_hasPendingArm()) {
-        bool armCmd = radio_link_getPendingArm();
-        radio_link_consumePendingArm();
-
-        Serial.printf("[LAUNCHER] Processing ARM cmd: arm=%d\n", armCmd);
-        launcherState_onArm(gState, armCmd);
+    PendingArmCmd armCmd = radio_link_consumePendingArm();
+    if (armCmd.valid) {
+        Serial.printf("[LAUNCHER] Processing ARM cmd: arm=%d\n", armCmd.arm);
+        launcherState_onArm(gState, armCmd.arm);
 
         // Immediately send STATUS so wrist knows the outcome
         radio_link_sendStatus(gState);
     }
 
     // ── 6. Process pending FIRE command ──────────────────────────────────────
-    if (radio_link_hasPendingFire()) {
-        PendingFireCmd cmd = radio_link_consumePendingFire();
+    PendingFireCmd cmd = radio_link_consumePendingFire();
+    if (cmd.valid) {
 
         Serial.printf("[LAUNCHER] Processing FIRE cmd id=%u token=%lu\n",
                       cmd.stratagemId, (unsigned long)cmd.requestToken);
