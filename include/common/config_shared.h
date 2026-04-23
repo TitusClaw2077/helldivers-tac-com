@@ -14,8 +14,8 @@
 #define STATUS_BROADCAST_INTERVAL_MS 1000  // launcher periodic status push
 
 // ─── Output checkpoint / ignition timing ─────────────────────────────────────
-#define OUTPUT_INDICATOR_PULSE_DURATION_MS 5000  // harmless red LED checkpoint pulse (extended for bench visibility)
-#define IGNITION_PULSE_DURATION_MS         1000  // default MOSFET on-time
+#define OUTPUT_INDICATOR_PULSE_DURATION_MS 5000  // completed LED-checkpoint stage pulse; no longer the active accepted-fire path
+#define IGNITION_PULSE_DURATION_MS         1000  // MOSFET dummy-load stage on-time on GPIO26
 #define POST_FIRE_COOLDOWN_MS              2000  // time in FIRED state before DISARMED
 
 // ─── Stratagem input ─────────────────────────────────────────────────────────
@@ -28,8 +28,8 @@
 #define BATTERY_SAMPLE_INTERVAL_MS  3000
 
 // ─── Hardware — Launcher GPIO ─────────────────────────────────────────────────
-#define PIN_IGNITION_GATE       26      // MOSFET gate output (kept forced LOW in LED checkpoint stage)
-#define PIN_OUTPUT_LED_RED      25      // harmless output-path checkpoint indicator
+#define PIN_IGNITION_GATE       26      // active MOSFET gate output for the dummy-load stage
+#define PIN_OUTPUT_LED_RED      25      // completed LED-checkpoint indicator path; keep inactive in MOSFET stage
 #define PIN_ARM_SENSE           27      // DaierTek switch sense input (divided)
 #define PIN_CONTINUITY_ADC      34      // ADC-only input for continuity check
 #define PIN_BATT_ADC            35      // ADC-only input for battery voltage divider

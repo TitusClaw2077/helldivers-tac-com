@@ -467,6 +467,15 @@ Before connecting real igniters, test with:
 - automotive lamp
 - other non-pyrotechnic resistive load
 
+**Current recommended first dummy-load checkpoint for this repo:**
+- `10 ohm` power resistor
+- `10W minimum`
+- `20W preferred`
+- connect it across the launcher output nodes (`ARMED_POS` to `IGN_NEG`)
+- use the existing `2S` launcher rail with the `IRLZ44N` low-side switch on `GPIO26`
+
+At `8.4V` full charge, this is about `0.84A` and roughly `7W`, which keeps the first MOSFET bench slice controlled without pretending it is a live igniter-current validation.
+
 Verify:
 - ARM switch behavior
 - ADC continuity classification
@@ -554,6 +563,7 @@ If ARM switch opens at any time:
 4. Add MOSFET gate wiring only, with no igniter battery attached
 5. Confirm GPIO26 toggles gate as expected
 6. Add high-current path with a dummy resistive load instead of igniter
+   - recommended first pass: `10 ohm`, `10W+`, across `ARMED_POS` and `IGN_NEG`
 7. Confirm MOSFET switches load correctly
 8. Add continuity circuit and log ADC values for:
    - open clips

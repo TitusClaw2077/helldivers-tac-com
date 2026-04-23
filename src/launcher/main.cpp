@@ -30,12 +30,11 @@ static void printMac(const char* label, const uint8_t* mac) {
                   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
-// ─── Output checkpoint complete callback ────────────────────────────────────
-static void onOutputIndicatorComplete() {
+// ─── Active output-path completion callback ─────────────────────────────────
+static void onFirePathComplete() {
     launcherState_onIgnitionComplete(gState);
-    Serial.println("[LAUNCHER] Output indicator pulse complete → FIRED");
+    Serial.println("[LAUNCHER] MOSFET dummy-load pulse complete -> FIRED");
 
-    // Send FIRE_ACK now that the harmless checkpoint pulse is done
     if (gFireAckPending) {
         radio_link_sendFireAck(gState,
                                gPendingFireToken,
@@ -44,7 +43,6 @@ static void onOutputIndicatorComplete() {
         gFireAckPending = false;
     }
 
-    // Immediately follow up with a STATUS so the wrist sees FIRED state
     radio_link_sendStatus(gState);
 }
 
@@ -56,12 +54,15 @@ void setup() {
     // ── Ignition GPIO must go LOW first ─────────────────────────────────────
     igniter_init(PIN_IGNITION_GATE);
     igniter_forceOff();
+    igniter_onComplete = onFirePathComplete;
+
     output_indicator_init(PIN_OUTPUT_LED_RED);
     output_indicator_forceOff();
-    output_indicator_onComplete = onOutputIndicatorComplete;
-    Serial.printf("[LAUNCHER] Output checkpoint mode: red LED on pin %d, ignition gate held LOW on pin %d\n",
-                  PIN_OUTPUT_LED_RED,
-                  PIN_IGNITION_GATE);
+    output_indicator_onComplete = nullptr;
+
+    Serial.printf("[LAUNCHER] MOSFET dummy-load mode: ignition gate active on pin %d, LED checkpoint pin %d forced LOW\n",
+                  PIN_IGNITION_GATE,
+                  PIN_OUTPUT_LED_RED);
 
     // ── Interlock switch input ───────────────────────────────────────────────
     pinMode(PIN_ARM_SENSE, INPUT);
@@ -116,9 +117,9 @@ void loop() {
 
     continuity_setMonitoringEnabled(gState.keySwitchOn);
 
-    // ── 3. Service harmless output checkpoint pulse ──────────────────────────
-    output_indicator_service(now);
-    igniter_forceOff();
+    // ── 3. Service active MOSFET dummy-load pulse path ──────────────────────
+    igniter_service(now);
+    output_indicator_forceOff();
 
     // ── 4. State machine tick ─────────────────────────────────────────────────
     launcherState_tick(gState, now);
@@ -150,11 +151,10 @@ void loop() {
         launcherState_onFireCmd(gState, cmd.requestToken);
 
         if (gState.state == LauncherSafetyState::FIRING) {
-            // State machine accepted the fire command — use the staged LED-only
-            // checkpoint instead of touching the MOSFET / igniter path.
-            output_indicator_startPulse(OUTPUT_INDICATOR_PULSE_DURATION_MS);
-            Serial.printf("[LAUNCHER] Output indicator pulse started on pin %d\n",
-                          PIN_OUTPUT_LED_RED);
+            igniter_startPulse(IGNITION_PULSE_DURATION_MS);
+            Serial.printf("[LAUNCHER] MOSFET dummy-load pulse started on pin %d for %u ms\n",
+                          PIN_IGNITION_GATE,
+                          static_cast<unsigned>(IGNITION_PULSE_DURATION_MS));
         } else {
             // Fire was rejected — send immediate FIRE_ACK with rejected status
             // and a STATUS to update the wrist
