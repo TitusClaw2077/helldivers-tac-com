@@ -147,6 +147,7 @@ bool gTouchReady = false;
 bool gTouchWasDown = false;
 uint8_t gLauncherMac[6] = {0};
 bool gShowHomeDetails = false;
+uint32_t gLastDetailsAgeRefreshMs = 0;
 
 UiScreen gLastScreen = UiScreen::LINK_WAIT;
 bool gHasLastFrame = false;
@@ -167,18 +168,17 @@ uint8_t gLastBufferLength = 0;
 bool gLastConfirmVisible = false;
 bool gLastShowHomeDetails = false;
 
-const Rect kArmButton        = { 20, 210, 136, 42 };
-const Rect kDisarmButton     = { 172, 210, 136, 42 };
-const Rect kDetailsButton    = { 324, 210, 136, 42 };
-const Rect kActivateButton   = { 20, 262, 440, 42 };
+const Rect kArmToggleButton  = { 20, 206, 272, 46 };
+const Rect kDetailsButton    = { 308, 206, 152, 46 };
+const Rect kActivateButton   = { 20, 260, 440, 48 };
 const Rect kBackButton       = { 20, 262, 140, 42 };
 const Rect kCancelButton     = { 330, 18, 130, 40 };
 const Rect kConfirmAbortButton = { 20, 256, 180, 48 };
 const Rect kFireButton       = { 220, 248, 240, 56 };
-const Rect kArrowUpButton    = { 180, 112, 120, 64 };
-const Rect kArrowLeftButton  = { 50, 190, 120, 64 };
-const Rect kArrowDownButton  = { 180, 190, 120, 64 };
-const Rect kArrowRightButton = { 310, 190, 120, 64 };
+const Rect kArrowUpButton    = { 176, 134, 128, 58 };
+const Rect kArrowLeftButton  = { 38, 206, 128, 58 };
+const Rect kArrowDownButton  = { 176, 206, 128, 58 };
+const Rect kArrowRightButton = { 314, 206, 128, 58 };
 
 const char* yesNo(bool v) {
     return v ? "YES" : "NO";
@@ -415,30 +415,53 @@ void drawGateCard(const Rect& r, const char* label, bool ready, const char* onTe
     }
 }
 
+void drawCompactStatusChip(const Rect& r, const char* label, const char* value, uint16_t valueColor = UI_TEXT) {
+    gDisplay.fillRoundRect(r.x, r.y, r.w, r.h, 10, UI_PANEL);
+    gDisplay.drawRoundRect(r.x, r.y, r.w, r.h, 10, UI_TEXT);
+    gDisplay.setTextColor(UI_DIM, UI_PANEL);
+    gDisplay.setTextDatum(textdatum_t::middle_center);
+    gDisplay.drawString(label, r.x + (r.w / 2), r.y + 14);
+    gDisplay.setTextColor(valueColor, UI_PANEL);
+    gDisplay.drawString(value, r.x + (r.w / 2), r.y + 36);
+    gDisplay.setTextDatum(textdatum_t::top_left);
+}
+
+void drawStatusAgeRow(uint32_t now, const LauncherLinkState& link) {
+    gDisplay.fillRect(244, 176, 196, 24, UI_BG);
+    char ageBuf[24];
+    formatStatusAge(link, now, ageBuf, sizeof(ageBuf));
+    drawStatusRow(248, 182, "STATUS AGE", ageBuf);
+}
+
 void drawHomeScreen(const LauncherLinkState& link, const UiViewModel& vm, uint32_t now) {
     (void)now;
     drawCompactHeader("TACTICAL LINK", "Main launcher gates and controls");
 
-    const Rect linkCard  = { 20, 72, 204, 64 };
-    const Rect keyCard   = { 256, 72, 204, 64 };
-    const Rect contCard  = { 20, 146, 204, 64 };
-    const Rect clearCard = { 256, 146, 204, 64 };
+    const Rect chipLink   = { 20, 72, 138, 52 };
+    const Rect chipKey    = { 170, 72, 138, 52 };
+    const Rect chipArmed  = { 320, 72, 140, 52 };
+    const Rect chipCont   = { 20, 136, 138, 52 };
+    const Rect chipFault  = { 170, 136, 138, 52 };
+    const Rect chipFire   = { 320, 136, 140, 52 };
 
-    drawGateCard(linkCard,  "LINK",  link.online);
-    drawGateCard(keyCard,   "ARM",   link.keySwitchOn, "ENABLED", "SAFE");
-    drawGateCard(contCard,  "CONT",  link.continuityOk, "PRESENT", "OPEN");
-    drawGateCard(clearCard, "FAULT", link.lastFaultCode == FaultCode::NONE, "CLEAR", "FAULT");
+    drawCompactStatusChip(chipLink,  "LINK",  link.online ? "ONLINE" : "OFFLINE", boolColor(link.online));
+    drawCompactStatusChip(chipKey,   "KEY",   link.keySwitchOn ? "ARM" : "SAFE", boolColor(link.keySwitchOn));
+    drawCompactStatusChip(chipArmed, "ARMED", link.armed ? "YES" : "NO", boolColor(link.armed));
+    drawCompactStatusChip(chipCont,  "CONT",  continuityName(link.continuityState), continuityColor(link.continuityState));
+    drawCompactStatusChip(chipFault, "FAULT", link.lastFaultCode == FaultCode::NONE ? "CLEAR" : "FAULT",
+                          link.lastFaultCode == FaultCode::NONE ? UI_OK : UI_FAULT);
+    drawCompactStatusChip(chipFire,  "FIRE",  link.firePermitted ? "READY" : "LOCKED",
+                          link.firePermitted ? UI_OK : UI_DIM);
 
     gDisplay.setTextColor(UI_DIM, UI_BG);
-    gDisplay.setCursor(20, 226);
+    gDisplay.setCursor(20, 196);
     gDisplay.printf("STATE %s", stateName(link.remoteState));
-    gDisplay.setCursor(180, 226);
-    gDisplay.printf("ARMED %s", yesNo(link.armed));
-    gDisplay.setCursor(320, 226);
-    gDisplay.printf("FIRE %s", link.firePermitted ? "READY" : "LOCKED");
+    gDisplay.setCursor(220, 196);
+    gDisplay.printf("EVENT %s", eventName(link.lastEvent));
 
-    drawButton(kArmButton, "ARM", UI_BTN_ARM);
-    drawButton(kDisarmButton, "DISARM", UI_BTN_DISARM);
+    drawButton(kArmToggleButton,
+               link.armed ? "DISARM LAUNCHER" : "ARM LAUNCHER",
+               link.armed ? UI_BTN_DISARM : UI_BTN_ARM);
     drawButton(kDetailsButton, "DETAILS", UI_PANEL);
 
     if (vm.activationAvailable) {
@@ -463,9 +486,7 @@ void drawHomeDetailsScreen(const LauncherLinkState& link, uint32_t now) {
     drawStatusRow(248, 134, "CAN FIRE", yesNo(link.firePermitted), boolColor(link.firePermitted));
     drawStatusRow(248, 158, "LINK Q", link.linkQuality >= 0 ? "OK" : "--");
 
-    char ageBuf[24];
-    formatStatusAge(link, now, ageBuf, sizeof(ageBuf));
-    drawStatusRow(248, 182, "STATUS AGE", ageBuf);
+    drawStatusAgeRow(now, link);
 
     drawButton(kBackButton, "BACK", UI_PANEL);
 }
@@ -496,12 +517,12 @@ void drawWaitingForArmScreen(const LauncherLinkState& link,
 void drawSequenceBoxes(const StratagemEngineState& engine) {
     if (engine.active.def == nullptr) return;
 
-    const int boxW = 48;
-    const int boxH = 44;
-    const int gap = 10;
+    const int boxW = 36;
+    const int boxH = 36;
+    const int gap = 8;
     const int totalW = (engine.active.def->length * boxW) + ((engine.active.def->length - 1) * gap);
     int startX = (SCREEN_W - totalW) / 2;
-    int y = 96;
+    int y = 84;
 
     for (uint8_t i = 0; i < engine.active.def->length; i++) {
         bool complete = i < engine.buffer.length;
@@ -535,7 +556,7 @@ void drawEntryScreen(const LauncherLinkState& link,
     if (engine.active.def != nullptr) {
         gDisplay.setTextColor(UI_ACCENT, UI_BG);
         gDisplay.setTextDatum(textdatum_t::middle_center);
-        gDisplay.drawString(engine.active.def->name, SCREEN_W / 2, 68);
+        gDisplay.drawString(engine.active.def->name, SCREEN_W / 2, 58);
         gDisplay.setTextDatum(textdatum_t::top_left);
     }
 
@@ -551,14 +572,14 @@ void drawConfirmScreen(const LauncherLinkState& link,
     gDisplay.setTextColor(UI_TEXT, UI_BG);
     gDisplay.setTextDatum(textdatum_t::middle_center);
     if (engine.active.def != nullptr) {
-        gDisplay.drawString(engine.active.def->name, SCREEN_W / 2, 60);
+        gDisplay.drawString(engine.active.def->name, SCREEN_W / 2, 56);
     }
 
     gDisplay.setTextColor(vm.confirmAvailable ? UI_OK : UI_WARN, UI_BG);
-    gDisplay.drawString(vm.confirmAvailable ? "FIRE WINDOW OPEN" : "LOCKING STRATAGEM", SCREEN_W / 2, 92);
+    gDisplay.drawString(vm.confirmAvailable ? "FIRE WINDOW OPEN" : "LOCKING STRATAGEM", SCREEN_W / 2, 88);
 
     gDisplay.setTextColor(UI_DIM, UI_BG);
-    gDisplay.drawString(stateName(link.remoteState), SCREEN_W / 2, 122);
+    gDisplay.drawString(stateName(link.remoteState), SCREEN_W / 2, 116);
     gDisplay.setTextDatum(textdatum_t::top_left);
 
     drawSequenceBoxes(engine);
@@ -659,10 +680,8 @@ void queueActionForTouch(int16_t x,
 
     switch (vm.screen) {
         case UiScreen::DIAGNOSTICS_HOME:
-            if (kArmButton.contains(x, y)) {
-                gPendingAction = DiagUiAction::ARM;
-            } else if (kDisarmButton.contains(x, y)) {
-                gPendingAction = DiagUiAction::DISARM;
+            if (kArmToggleButton.contains(x, y)) {
+                gPendingAction = link.armed ? DiagUiAction::DISARM : DiagUiAction::ARM;
             } else if (kDetailsButton.contains(x, y)) {
                 gShowHomeDetails = true;
             } else if (vm.activationAvailable && kActivateButton.contains(x, y)) {
@@ -826,6 +845,13 @@ void diag_ui_tick(const LauncherLinkState& link,
     if (shouldRedraw(link, engine, stratagemModeRequested, fireCommandInFlight)) {
         drawFrame(link, engine, stratagemModeRequested, fireCommandInFlight, now);
         rememberFrame(link, engine, stratagemModeRequested, fireCommandInFlight);
+        gLastDetailsAgeRefreshMs = now;
+    } else if (buildViewModel(link, engine, stratagemModeRequested, fireCommandInFlight).screen == UiScreen::HOME_DETAILS &&
+               now - gLastDetailsAgeRefreshMs >= 1000) {
+        gDisplay.startWrite();
+        drawStatusAgeRow(now, link);
+        gDisplay.endWrite();
+        gLastDetailsAgeRefreshMs = now;
     }
 }
 
