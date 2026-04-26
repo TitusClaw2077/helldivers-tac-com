@@ -10,6 +10,7 @@
 #define LAUNCHER_TIMEOUT_MS         5000    // wrist marks launcher offline after this
 #define STRATAGEM_INPUT_TIMEOUT_MS  3000    // clears entered sequence on inactivity
 #define POST_MATCH_LOCKOUT_MS       2000    // delay between match and confirm prompt
+#define FIRE_COMMAND_TIMEOUT_MS     4000    // wrist-side recovery timeout if fire never reaches a terminal state
 #define CONTINUITY_CHECK_INTERVAL_MS 500   // how often launcher samples continuity
 #define STATUS_BROADCAST_INTERVAL_MS 1000  // launcher periodic status push
 

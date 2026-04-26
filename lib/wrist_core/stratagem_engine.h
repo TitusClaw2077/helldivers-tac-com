@@ -25,8 +25,9 @@ void    stratagemEngine_tick(StratagemEngineState& s, uint32_t now);
 void    stratagemEngine_onDirection(StratagemEngineState& s, Direction d, uint32_t now);
 void    stratagemEngine_onConfirm(StratagemEngineState& s);
 void    stratagemEngine_reset(StratagemEngineState& s);
+void    stratagemEngine_clearActive(StratagemEngineState& s);
 
-// Call when launcher transitions to ARMED to assign a random active stratagem
+// Call when the UI starts a new launcher sequence to assign a random active stratagem
 void    stratagemEngine_selectRandom(StratagemEngineState& s);
 
 bool    stratagemEngine_isInputEnabled(const StratagemEngineState& s, bool launcherArmed);

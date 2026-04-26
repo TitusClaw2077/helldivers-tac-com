@@ -60,6 +60,8 @@ extern const int STRATAGEM_DB_SIZE;
 
 // ─── Launch pool (random selection from this set) ────────────────────────────
 extern const StratagemDef* LAUNCH_POOL[LAUNCH_POOL_SIZE];
+void ensureLaunchPoolBuilt();
+int  getLaunchPoolCount();
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const StratagemDef* getStratagemById(uint8_t id);

@@ -10,35 +10,86 @@
 static StratagemEngineState gEngine;
 static LauncherLinkState    gLink;
 
-// Track armed state across ticks so we can detect the DISARMED→ARMED edge
-static bool gWasArmed = false;
-
-// Request token counter for fire commands
 static uint32_t gFireToken = 0;
 static bool gFireCommandInFlight = false;
+static bool gStratagemModeRequested = false;
+static bool gFireSequenceStarted = false;
+static uint32_t gFireCommandStartedAtMs = 0;
 
-static void updateFireLockout() {
-    if (!gFireCommandInFlight) return;
-
-    if (!gLink.online ||
-        gLink.remoteState == LauncherSafetyState::FIRED ||
-        gLink.remoteState == LauncherSafetyState::DISARMED ||
-        gLink.remoteState == LauncherSafetyState::FAULT) {
-        gFireCommandInFlight = false;
-        Serial.println("[WRIST] Fire lockout cleared");
-    }
+static bool launcherReadyForActivation() {
+    return gLink.online &&
+           gLink.keySwitchOn &&
+           gLink.continuityOk &&
+           gLink.lastFaultCode == FaultCode::NONE;
 }
 
-static void sendFireCommand(const char* source, uint32_t matchedAtMs) {
-    if (gFireCommandInFlight) {
-        Serial.printf("[WRIST] %s fire ignored — command already in flight\n", source);
+static bool launcherReadyForFire() {
+    return gLink.online &&
+           gLink.remoteState == LauncherSafetyState::ARMED &&
+           gLink.armed &&
+           gLink.keySwitchOn &&
+           gLink.continuityOk &&
+           gLink.firePermitted &&
+           gLink.lastFaultCode == FaultCode::NONE;
+}
+
+static void clearStratagemFlow(const char* reason) {
+    if (gStratagemModeRequested || gEngine.active.def != nullptr || gFireSequenceStarted) {
+        Serial.printf("[WRIST] Clearing stratagem flow: %s\n", reason);
+    }
+
+    stratagemEngine_clearActive(gEngine);
+    gStratagemModeRequested = false;
+    gFireSequenceStarted = false;
+    gFireCommandInFlight = false;
+    gFireCommandStartedAtMs = 0;
+}
+
+static void clearFireLockout(const char* reason) {
+    if (!gFireCommandInFlight) return;
+
+    gFireCommandInFlight = false;
+    gFireCommandStartedAtMs = 0;
+    Serial.printf("[WRIST] Fire lockout cleared: %s\n", reason);
+}
+
+static void updateFireLockout(uint32_t now) {
+    if (!gFireCommandInFlight) return;
+
+    if (!gLink.online) {
+        clearFireLockout("launcher offline");
         return;
     }
 
-    if (gLink.online && gLink.armed && gLink.continuityOk) {
+    if (gLink.remoteState == LauncherSafetyState::FIRED ||
+        gLink.remoteState == LauncherSafetyState::DISARMED ||
+        gLink.remoteState == LauncherSafetyState::FAULT) {
+        clearFireLockout("terminal launcher state");
+        return;
+    }
+
+    if (gFireCommandStartedAtMs != 0 &&
+        (now - gFireCommandStartedAtMs) >= FIRE_COMMAND_TIMEOUT_MS) {
+        clearFireLockout("timeout");
+        clearStratagemFlow("fire timeout recovery");
+    }
+}
+
+static bool sendFireCommand(const char* source, uint32_t matchedAtMs) {
+    if (gFireCommandInFlight) {
+        Serial.printf("[WRIST] %s fire ignored, command already in flight\n", source);
+        return false;
+    }
+
+    if (gEngine.active.def == nullptr) {
+        Serial.printf("[WRIST] %s fire blocked, no active stratagem selected\n", source);
+        return false;
+    }
+
+    if (launcherReadyForFire()) {
         gFireToken++;
-        uint8_t sid = gEngine.active.def ? gEngine.active.def->id : 0;
-        uint8_t slen = gEngine.active.def ? gEngine.active.def->length : 0;
+        uint8_t sid = gEngine.active.def->id;
+        uint8_t slen = gEngine.active.def->length;
 
         Serial.printf("[WRIST] %s sending FIRE_CMD id=%u token=%lu\n",
                       source,
@@ -51,20 +102,24 @@ static void sendFireCommand(const char* source, uint32_t matchedAtMs) {
                                   gFireToken,
                                   matchedAtMs);
         gFireCommandInFlight = true;
-    } else {
-        Serial.printf("[WRIST] %s fire blocked — launcher not ready\n", source);
+        gFireSequenceStarted = true;
+        gFireCommandStartedAtMs = millis();
+        return true;
     }
+
+    Serial.printf("[WRIST] %s fire blocked, launcher not ready for fire\n", source);
+    return false;
 }
 
 static const char* stateName(LauncherSafetyState state) {
     switch (state) {
         case LauncherSafetyState::BOOTING:   return "BOOTING";
-        case LauncherSafetyState::DISARMED: return "DISARMED";
-        case LauncherSafetyState::ARMED:    return "ARMED";
-        case LauncherSafetyState::FIRING:   return "FIRING";
-        case LauncherSafetyState::FIRED:    return "FIRED";
-        case LauncherSafetyState::FAULT:    return "FAULT";
-        default:                            return "UNKNOWN";
+        case LauncherSafetyState::DISARMED:  return "DISARMED";
+        case LauncherSafetyState::ARMED:     return "ARMED";
+        case LauncherSafetyState::FIRING:    return "FIRING";
+        case LauncherSafetyState::FIRED:     return "FIRED";
+        case LauncherSafetyState::FAULT:     return "FAULT";
+        default:                             return "UNKNOWN";
     }
 }
 
@@ -95,8 +150,16 @@ static void handleSerialConsole() {
     } else if (cmd == "disarm") {
         Serial.println("[WRIST] Serial command: DISARM");
         launcher_link_sendArmSet(gLink, false);
+        clearStratagemFlow("serial disarm");
     } else if (cmd == "fire") {
-        sendFireCommand("Serial command", millis());
+        if (gEngine.inputState == StratagemInputState::CONFIRMING) {
+            stratagemEngine_onConfirm(gEngine);
+            if (!sendFireCommand("Serial command", gEngine.matchedAtMs)) {
+                clearStratagemFlow("serial fire blocked");
+            }
+        } else {
+            Serial.println("[WRIST] Serial fire blocked: stratagem confirm not open");
+        }
     } else if (cmd == "status") {
         printLinkStatus();
     } else if (cmd == "help" || cmd == "?") {
@@ -113,18 +176,86 @@ static void printMac(const char* label, const uint8_t* mac) {
                   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
+static void handleUiAction(DiagUiAction uiAction, uint32_t now) {
+    switch (uiAction) {
+        case DiagUiAction::NONE:
+            break;
+
+        case DiagUiAction::ARM:
+            Serial.println("[WRIST] UI action: ARM");
+            launcher_link_sendArmSet(gLink, true);
+            break;
+
+        case DiagUiAction::DISARM:
+            Serial.println("[WRIST] UI action: DISARM");
+            launcher_link_sendArmSet(gLink, false);
+            clearStratagemFlow("ui disarm");
+            break;
+
+        case DiagUiAction::ACTIVATE:
+            Serial.println("[WRIST] UI action: ACTIVATE STRATAGEM");
+            if (!launcherReadyForActivation()) {
+                Serial.println("[WRIST] Activate blocked, launcher not ready");
+                break;
+            }
+            stratagemEngine_selectRandom(gEngine);
+            gStratagemModeRequested = (gEngine.active.def != nullptr);
+            if (!gStratagemModeRequested) {
+                Serial.println("[WRIST] Activate blocked, launch pool empty");
+                break;
+            }
+            if (!gLink.armed) {
+                launcher_link_sendArmSet(gLink, true);
+            }
+            break;
+
+        case DiagUiAction::CANCEL:
+            Serial.println("[WRIST] UI action: CANCEL STRATAGEM");
+            launcher_link_sendArmSet(gLink, false);
+            clearStratagemFlow("ui cancel");
+            break;
+
+        case DiagUiAction::DIR_UP:
+            Serial.println("[WRIST] UI action: UP");
+            stratagemEngine_onDirection(gEngine, Direction::UP, now);
+            break;
+
+        case DiagUiAction::DIR_DOWN:
+            Serial.println("[WRIST] UI action: DOWN");
+            stratagemEngine_onDirection(gEngine, Direction::DOWN, now);
+            break;
+
+        case DiagUiAction::DIR_LEFT:
+            Serial.println("[WRIST] UI action: LEFT");
+            stratagemEngine_onDirection(gEngine, Direction::LEFT, now);
+            break;
+
+        case DiagUiAction::DIR_RIGHT:
+            Serial.println("[WRIST] UI action: RIGHT");
+            stratagemEngine_onDirection(gEngine, Direction::RIGHT, now);
+            break;
+
+        case DiagUiAction::FIRE:
+            Serial.println("[WRIST] UI action: FIRE MISSILE");
+            if (gEngine.inputState == StratagemInputState::CONFIRMING) {
+                stratagemEngine_onConfirm(gEngine);
+                if (!sendFireCommand("UI action", gEngine.matchedAtMs)) {
+                    clearStratagemFlow("ui fire blocked");
+                }
+            }
+            break;
+    }
+}
+
 // ─── Setup ───────────────────────────────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
     Serial.println("[WRIST] Boot");
 
-    // Seed RNG from hardware entropy
     randomSeed(esp_random());
 
-    // Init stratagem engine
     stratagemEngine_init(gEngine);
 
-    // Init ESP-NOW (WiFi must be STA before esp_now_init)
     WiFi.mode(WIFI_STA);
     uint8_t staMac[6] = {0};
     WiFi.macAddress(staMac);
@@ -134,17 +265,12 @@ void setup() {
     printMac("Configured launcher peer:", expectedLauncherMac);
 
     if (esp_now_init() != ESP_OK) {
-        Serial.println("[WRIST] ESP-NOW init failed — halting");
+        Serial.println("[WRIST] ESP-NOW init failed, halting");
         while (true) delay(1000);
     }
 
-    // Init launcher link (registers peer + recv callback)
     launcher_link_init(gLink);
-
-    // Init minimum diagnostics UI for bench bring-up
     diag_ui_init(expectedLauncherMac);
-
-    // TODO: init battery monitor ADC
 
     Serial.println("[WRIST] Ready");
     Serial.println("[WRIST] Serial commands: arm, disarm, fire, status, help");
@@ -154,59 +280,38 @@ void setup() {
 void loop() {
     uint32_t now = millis();
 
-    // ── 1. Service ESP-NOW comms ──────────────────────────────────────────────
     launcher_link_tick(gLink, now);
-    updateFireLockout();
+    updateFireLockout(now);
 
-    // ── 1b. Minimum diagnostics UI + action handling ────────────────────────
-    diag_ui_tick(gLink, now);
+    if (gStratagemModeRequested) {
+        if (!launcherReadyForActivation()) {
+            clearStratagemFlow("launcher no longer ready");
+        } else if (gEngine.inputState != StratagemInputState::IDLE && !gLink.armed) {
+            clearStratagemFlow("unexpected arm loss");
+        } else if ((gEngine.inputState == StratagemInputState::CONFIRMING ||
+                    gEngine.inputState == StratagemInputState::FIRING) && !gLink.firePermitted) {
+            clearStratagemFlow("launcher no longer fire-permitted");
+        }
+    }
+
+    if (gFireSequenceStarted && !gFireCommandInFlight &&
+        (!gLink.online ||
+         gLink.remoteState == LauncherSafetyState::FIRED ||
+         gLink.remoteState == LauncherSafetyState::DISARMED ||
+         gLink.remoteState == LauncherSafetyState::FAULT)) {
+        clearStratagemFlow("fire sequence completed");
+    }
+
+    diag_ui_tick(gLink,
+                 gEngine,
+                 gStratagemModeRequested,
+                 gFireCommandInFlight,
+                 now);
 
     DiagUiAction uiAction = diag_ui_takeAction();
-    if (uiAction == DiagUiAction::ARM) {
-        Serial.println("[WRIST] UI action: ARM");
-        launcher_link_sendArmSet(gLink, true);
-    } else if (uiAction == DiagUiAction::DISARM) {
-        Serial.println("[WRIST] UI action: DISARM");
-        launcher_link_sendArmSet(gLink, false);
-    } else if (uiAction == DiagUiAction::FIRE) {
-        Serial.println("[WRIST] UI action: FIRE");
-        sendFireCommand("UI action", millis());
-    }
+    handleUiAction(uiAction, now);
 
-    // ── 1c. Temporary serial debug console for bench testing ─────────────────
     handleSerialConsole();
 
-    // ── 2. Detect DISARMED→ARMED transition ──────────────────────────────────
-    bool currentlyArmed = gLink.online && gLink.armed;
-
-    if (currentlyArmed && !gWasArmed) {
-        // Launcher just transitioned to ARMED — assign a random stratagem
-        Serial.println("[WRIST] Launcher ARMED — selecting stratagem");
-        stratagemEngine_selectRandom(gEngine);
-    }
-
-    if (!currentlyArmed && gWasArmed) {
-        // Launcher went offline or disarmed — reset input engine
-        Serial.println("[WRIST] Launcher disarmed/offline — resetting engine");
-        stratagemEngine_reset(gEngine);
-    }
-
-    gWasArmed = currentlyArmed;
-
-    // ── 3. Service stratagem engine ───────────────────────────────────────────
     stratagemEngine_tick(gEngine, now);
-
-    // ── 4. Check fire-ready condition ─────────────────────────────────────────
-    if (stratagemEngine_readyToFire(gEngine)) {
-        sendFireCommand("Stratagem engine", gEngine.matchedAtMs);
-
-        // Always reset engine after fire attempt regardless of outcome
-        stratagemEngine_reset(gEngine);
-    }
-
-    // ── 5. TODO: service battery monitor ─────────────────────────────────────
-    // batteryMonitor_tick(now);
-
-    // ── 6. TODO: service power manager ───────────────────────────────────────
-    // powerManager_tick(now);
 }

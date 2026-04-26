@@ -15,21 +15,30 @@ void stratagemEngine_init(StratagemEngineState& s) {
 }
 
 void stratagemEngine_reset(StratagemEngineState& s) {
-    s.inputState        = StratagemInputState::IDLE;
-    s.buffer.length     = 0;
-    s.buffer.lastInputMs= 0;
-    s.confirmVisible    = false;
+    s.inputState         = StratagemInputState::IDLE;
+    s.buffer.length      = 0;
+    s.buffer.lastInputMs = 0;
+    s.matchedAtMs        = 0;
+    s.confirmOpenAtMs    = 0;
+    s.confirmVisible     = false;
     // Keep active stratagem assigned — don't re-roll on reset
 }
 
+void stratagemEngine_clearActive(StratagemEngineState& s) {
+    stratagemEngine_reset(s);
+    s.active.poolIndex    = -1;
+    s.active.def          = nullptr;
+    s.active.selectedAtMs = 0;
+}
+
 void stratagemEngine_selectRandom(StratagemEngineState& s) {
-    // Build pool if not already done
-    // Find how many pool entries are actually set
-    int poolSize = 0;
-    for (int i = 0; i < LAUNCH_POOL_SIZE; i++) {
-        if (LAUNCH_POOL[i] != nullptr) poolSize++;
+    ensureLaunchPoolBuilt();
+
+    int poolSize = getLaunchPoolCount();
+    if (poolSize == 0) {
+        stratagemEngine_clearActive(s);
+        return;
     }
-    if (poolSize == 0) return;
 
     int pick;
     if (poolSize == 1) {

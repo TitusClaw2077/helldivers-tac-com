@@ -1,258 +1,305 @@
 # Bench Bring-Up Guide
 
-*Created: 2026-04-11*
+This document is the practical bring-up and re-validation sequence for the **current validated simplified Helldivers Tac-Com bench rig**.
 
-This document is the practical bring-up sequence for the current `helldivers-tac-com` repo state.
+It reflects the project state **after**:
+- ESP-NOW comms validation
+- remote ARM / DISARM and SAFE interlock validation
+- continuity OPEN / PRESENT validation on the current rig
+- wrist diagnostics UI checkpoint
+- LED checkpoint on `GPIO25`
+- MOSFET dummy-load switching checkpoint on `GPIO26`
+- continuity suppression during the active pulse
+- launcher pending-command race fix
+- buck-converter-powered controller retest on the same safe dummy-load rig
+
+If this doc conflicts with older thread history, trust the current repo docs.
+
+Related docs:
+- `docs/LAUNCHER_WIRING.md`
+- `projects/helldivers-tac-com/CONTINUITY_BENCH_SETUP.md`
+- `projects/helldivers-tac-com/MOSFET_DUMMY_LOAD_BENCH_SETUP.md`
+- `projects/helldivers-tac-com/BUCK_CONVERTER_BENCH_PREP.md`
+
+---
 
 ## What is verified right now
 
-As of 2026-04-11, both PlatformIO environments build successfully on the VM:
+Both PlatformIO environments currently build on the VM:
 
 - `pio run -e wrist` ✅
 - `pio run -e launcher` ✅
 
-That means the repo is ready for **firmware upload and serial bring-up**.
+The current repo is already proven far beyond first radio bring-up.
 
-It does **not** yet mean the full launcher workflow is complete end to end.
+### Current verified launcher-side behavior
+- ESP-NOW wrist/launcher comms work
+- launcher/wrist peer MAC mismatch was found and fixed earlier
+- SAFE blocks remote ARM
+- physical ARM allows remote ARM
+- remote DISARM works
+- returning the switch to SAFE forces disarm
+- continuity classification on the current bench rig is calibrated and working
+- accepted FIRE uses the real `GPIO26` -> MOSFET path on a safe dummy load
+- continuity sampling is suppressed during the active fire pulse
+- launcher command handling was hardened after the post-boot ARM/FIRE race issue
+- launcher controller operation was revalidated on buck power without USB as the authoritative result
 
-## Important reality check
+### Current verified wrist-side behavior
+- diagnostics UI scaffold is active in the current repo
+- on-screen ARM / DISARM controls work on hardware
+- temporary FIRE control exists for bench work
+- extra FIRE taps are ignored while a fire command is already in flight
+- current CrowPanel unit works with the **v2.2** touch/read pin profile
 
-The current firmware is ready for:
-- boot verification
-- ESP-NOW peer registration
-- heartbeat / status exchange
-- launcher interlock switch sense verification
+---
 
-The current firmware is **not yet ready for full arm-and-fire bench testing** because:
-- the wrist UI/touch path is still TODO
-- the wrist firmware currently has no user input path that sends `ARM_SET`
-- launcher continuity sampling is still TODO, so continuity stays `UNKNOWN`
-- the wrist blocks fire if continuity is not good
+## Current rig definition
 
-So the practical bench target **today** is:
-1. upload both boards
-2. confirm both boot cleanly
-3. confirm peer registration
-4. confirm launcher heartbeat/status loop works
-5. confirm the launcher ARM/SAFE switch is sensed correctly
+This guide assumes the **current validated simplified bench rig**, not a final launcher build.
 
-That is still useful bring-up work. It proves the radio path and safety interlock foundation before dummy-load or igniter work.
+### In circuit now
+- launcher ESP32
+- wrist ESP32/CrowPanel
+- physical ARM/SAFE switch
+- arm-sense divider into `GPIO27`
+- continuity network around:
+  - `ARMED_POS`
+  - `IGN_NEG`
+  - `CONT_NODE`
+  - `ADC_SENSE`
+  - `GPIO34`
+- `IRLZ44N` low-side MOSFET
+- `GPIO26 -> 330 ohm -> gate`
+- `10k` gate pulldown
+- `10 ohm` dummy load across `ARMED_POS` and `IGN_NEG`
+- `2S` launcher battery / load rail
+- buck converter feeding ESP32 `5V/VIN` for the current controller-power checkpoint
+
+### Not in circuit now
+- real igniter/e-match
+- active banana-clip live launch wiring
+- final launcher harness / field packaging
 
 ---
 
 ## Safety setup for this bench session
 
-For this stage:
-- **Do not attach a real igniter**
-- keep the launcher output unloaded, or use only a harmless indicator/dummy setup later
+For this bench rig:
+- **do not attach a real igniter**
+- keep the dummy load as the only switched load
 - start with the physical ARM/SAFE switch in **SAFE**
-- keep the MOSFET gate/output wiring conservative and double-check polarity before power-up
-- use the inline fuse on the igniter rail if that rail is connected at all
-- share ground correctly between controller-side electronics and the launcher circuit
-
-Because continuity logic is not active yet, there is no reason to connect a real match for this pass.
+- verify the MOSFET gate pulldown is present before power-up
+- verify common ground between:
+  - battery negative
+  - MOSFET source
+  - buck ground
+  - ESP32 ground
+- keep the inline fuse on the launcher positive rail
+- treat the rig as electrically live whenever the battery is connected, even though this is still the safe dummy-load stage
 
 ---
 
-## Upload sequence
-
-Open the repo in VS Code / PlatformIO:
+## Build and upload sequence
 
 ```bash
 cd ~/.openclaw/workspace/helldivers-tac-com
 ```
 
-### Build again if you want a clean confirmation
+### Clean build confirmation
 
 ```bash
 pio run -e wrist
 pio run -e launcher
 ```
 
-### Upload launcher firmware
-
-Connect only the launcher board first.
+### Upload launcher
 
 ```bash
 pio run -e launcher --target upload
 ```
 
-### Upload wrist firmware
-
-Then connect the wrist board.
+### Upload wrist
 
 ```bash
 pio run -e wrist --target upload
 ```
 
-If PlatformIO picks the wrong port, select the correct serial port in VS Code before uploading.
+If PlatformIO selects the wrong serial port, choose the correct port explicitly before upload.
 
 ---
 
 ## Serial monitor workflow
 
-Use 115200 baud.
+Use `115200` baud.
 
 ```bash
 pio device monitor -b 115200
 ```
 
-If you want to monitor one specific board at a time, do it in this order:
-
+Recommended observation order:
 1. launcher by itself
 2. wrist by itself
-3. both powered together, switching between ports as needed
+3. both powered together
+4. launcher during SAFE/ARM and accepted FIRE bench checks
 
 ---
 
-## Expected launcher boot output
+## Expected current bring-up checkpoints
 
-On a clean launcher boot, you should see the equivalent of:
+## 1. Boot and peer registration
 
+### Launcher should show the equivalent of
 ```text
 [LAUNCHER] Boot
 [LAUNCHER/radio] Wrist peer registered: <wrist-mac>
-[LAUNCHER] Ready — state: DISARMED
+[LAUNCHER] Ready
 ```
 
-Once the wrist is online and sending heartbeats, you should also start seeing:
-
-```text
-[LAUNCHER/radio] HEARTBEAT rx seq=<n>
-```
-
-That confirms:
-- ESP-NOW initialized
-- the paired wrist MAC was accepted as a peer
-- the launcher is receiving traffic from the wrist
-
----
-
-## Expected wrist boot output
-
-On a clean wrist boot, you should see the equivalent of:
-
+### Wrist should show the equivalent of
 ```text
 [WRIST] Boot
 [WRIST/link] Launcher peer registered: <launcher-mac>
 [WRIST] Ready
 ```
 
-Once the launcher begins broadcasting status, the wrist should log status packets like:
-
-```text
-[WRIST/link] STATUS rx — state=<n> armed=0 cont=0 key=0
-```
-
-Notes:
-- `state=<n>` is expected because the current log prints the enum numerically
-- `armed=0` is expected at boot
-- `cont=0` is expected right now because continuity is not implemented yet
-- `key=0` means the physical ARM switch is still in SAFE
+Once both are online, heartbeats/status packets should resume normally.
 
 ---
 
-## ARM/SAFE switch check
-
-This is the most useful live bench check available in the current firmware.
+## 2. SAFE / ARM interlock check
 
 ### Start condition
-- launcher powered on
-- wrist powered on
-- both exchanging packets
-- launcher switch in **SAFE**
+- both boards powered
+- status/heartbeat traffic is alive
+- launcher switch in SAFE
 
-### Flip the launcher switch to ARM
+### SAFE expectation
+- wrist status reflects `key=0`
+- remote ARM should be rejected
+- continuity should not be treated as active fire-permission input while SAFE on this rig
 
-On the launcher monitor, expect:
+### Flip to ARM
+Expected:
+- launcher senses the switch transition
+- wrist status reflects `key=1`
+- remote ARM can now be accepted
 
-```text
-[LAUNCHER] Key switch: ARM
-```
-
-On the wrist side, subsequent status logs should change from `key=0` to `key=1`.
-
-Example:
-
-```text
-[WRIST/link] STATUS rx — state=<n> armed=0 cont=0 key=1
-```
-
-### Flip the launcher switch back to SAFE
-
-On the launcher monitor, expect:
-
-```text
-[LAUNCHER] Key switch: SAFE
-```
-
-On the wrist side, status should return to `key=0`.
-
-This confirms the physical interlock sense input is working through the radio link.
+### Flip back to SAFE
+Expected:
+- launcher forces disarm
+- wrist status returns to SAFE indication
 
 ---
 
-## What you should **not** expect yet
+## 3. Continuity check on the current rig
 
-Do not expect the current firmware to do these yet:
+This is already calibrated on the real bench setup.
 
-### 1. Wrist-driven arming
-There is no active UI/button/input path in `src/wrist/main.cpp` that calls:
+### OPEN case
+With nothing bridging `ARMED_POS` to `IGN_NEG`, the launcher should classify continuity as:
+- `OPEN`
+- raw about `242-243`
 
-- `launcher_link_sendArmSet(...)`
+### PRESENT case
+With the validated `10 ohm` dummy load between `ARMED_POS` and `IGN_NEG`, the launcher should classify continuity as:
+- `PRESENT`
+- raw about `2996-2999`
 
-So the launcher will not enter ARMED from normal wrist use yet.
-
-### 2. Successful fire permission
-The launcher state machine requires:
-- `state == ARMED`
-- interlock on
-- `continuity == PRESENT`
-
-But continuity sampling is still TODO in `src/launcher/main.cpp`, so the continuity state does not become `PRESENT` in the current build.
-
-### 3. Real stratagem input flow
-Display, touch, and LVGL setup are still TODO in the wrist main loop, so there is no real human input path yet.
+### Acceptable quirk
+One transient enable-time `UNKNOWN` is acceptable on the current rig before it settles.
 
 ---
 
-## Recommended bench conclusion for this firmware revision
+## 4. Accepted FIRE dummy-load check
 
-If the following all work, this firmware revision has passed the right bring-up goal:
+This is the current launcher-side fire-path checkpoint.
 
-- both targets upload successfully
-- launcher boots DISARMED
-- both peers register the expected MAC address
-- launcher receives wrist heartbeats
-- wrist receives launcher status packets
-- flipping the physical ARM/SAFE switch changes `key=0/1` on the wrist status logs
-- no unexpected boot-time ignition activity occurs
+### Preconditions
+- dummy load connected
+- physical switch in ARM
+- launcher remotely armed
+- continuity reports `PRESENT`
 
-That is a solid foundation check before moving to dummy-load fire-path testing.
+### Accepted case expectation
+- launcher accepts `FIRE_CMD`
+- `GPIO26` pulses the MOSFET gate
+- dummy load is switched only during the accepted pulse
+- launcher transitions through firing flow cleanly
+- `FIRE_ACK` is sent
+- launcher returns cleanly afterward
+
+### Bench measurements already established
+- SAFE OFF case: load measured `0V`
+- ARM idle case: load measured about `9 mV`
+- accepted FIRE, earlier pass: about `6.0-6.2V`
+- accepted FIRE, later retest: about `5.94V`
+- accepted FIRE, authoritative buck-only run: about `5.5V`
+
+### Important continuity behavior
+During the current validated firmware/runtime:
+- continuity sampling is suppressed during the active fire pulse
+- the launcher should no longer report the earlier misleading mid-pulse `OPEN`
 
 ---
 
-## Best next firmware tasks
+## 5. Buck-powered controller revalidation
 
-To reach true bench fire-path testing with a dummy load, the next missing pieces are:
+The current authoritative controller-power result is the **buck-only** run.
 
-1. **Add a temporary arm/disarm test control on the wrist**
-   - serial command, hardcoded timer, or simple button input
-   - enough to exercise `launcher_link_sendArmSet(...)`
+### Expected result
+- ESP32 boots from buck power without USB-C attached
+- no unexpected resets during ARM/FIRE activity
+- radio behavior remains sane
+- accepted FIRE still switches the dummy load cleanly
+- post-fire heartbeats continue normally
 
-2. **Implement or stub continuity handling on the launcher**
-   - either real ADC-based continuity sensing
-   - or a clearly temporary bench stub for dummy-load development only
+### Important note
+A mixed buck+USB check was tried later, but it is **not** the source of truth because power priority in that setup was ambiguous.
 
-3. **Add a temporary test trigger for fire**
-   - only after arm path and continuity behavior are verified
-   - still using LED or resistive dummy load first, never a real igniter during code-debug bring-up
+---
 
-4. **Then wire in the real wrist UI**
-   - display init
-   - touch init
-   - LVGL screens
-   - stratagem input path
+## What you should not expect from this rig yet
+
+Do not treat the current bench rig as proof of:
+- live igniter firing readiness
+- banana-clip live launch readiness
+- final field wiring quality
+- final mechanical packaging
+- final current capacity of the eventual launcher harness
+
+This is still a deliberate, simplified, safe dummy-load stage.
+
+---
+
+## Recommended bench pass/fail summary for the current repo
+
+A clean current-session bring-up means:
+- both firmware targets build and upload
+- both peers register and exchange traffic
+- SAFE/ARM state propagates correctly
+- remote ARM / DISARM behavior still matches the validated interlock rules
+- continuity still separates cleanly into OPEN and PRESENT on the current rig
+- accepted FIRE still switches only the safe `10 ohm` dummy load through `GPIO26` / `IRLZ44N`
+- continuity stays sane during the pulse because mid-pulse sampling is suppressed
+- buck-powered controller behavior remains stable
+
+If all of that is still true, the launcher side is ready to move forward from documentation cleanup into the next deliberate phase.
+
+---
+
+## Best next step after this doc state
+
+After this doc cleanup, the next project phase should be:
+
+**post-cleanup launcher readiness planning for the first igniter-adjacent phase, still with risk controlled deliberately**
+
+That means:
+1. freeze the launcher node names and wiring assumptions now documented
+2. decide the exact first igniter-adjacent checkpoint before touching hardware
+3. define the minimum hardware delta from the current safe dummy-load rig
+4. define pass/fail evidence before the next bench change
+5. keep live firing itself out of scope until that checkpoint is written down clearly
 
 ---
 
@@ -280,4 +327,6 @@ pio device monitor -b 115200
 - `docs/PROJECT_SPEC.md`
 - `docs/LAUNCHER_WIRING.md`
 - `docs/FIRMWARE_ARCHITECTURE.md`
-
+- `projects/helldivers-tac-com/CONTINUITY_BENCH_SETUP.md`
+- `projects/helldivers-tac-com/MOSFET_DUMMY_LOAD_BENCH_SETUP.md`
+- `projects/helldivers-tac-com/BUCK_CONVERTER_BENCH_PREP.md`

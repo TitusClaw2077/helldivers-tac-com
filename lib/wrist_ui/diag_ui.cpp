@@ -4,7 +4,7 @@
 #include <SPI.h>
 #include <LovyanGFX.hpp>
 #include <XPT2046_Touchscreen.h>
-#include "protocol_types.h"
+#include <string.h>
 
 namespace {
 #ifndef CROWPANEL_REV_V22
@@ -28,9 +28,6 @@ constexpr uint16_t SCREEN_W = 480;
 constexpr uint16_t SCREEN_H = 320;
 constexpr uint8_t SCREEN_ROTATION = 1;
 
-// These are intentionally coarse first-pass calibration values for the CrowPanel
-// resistive touch stack. Buttons are large so bench bring-up can work even if
-// the raw range varies a little by unit.
 constexpr int TOUCH_RAW_MIN_X = 200;
 constexpr int TOUCH_RAW_MAX_X = 3900;
 constexpr int TOUCH_RAW_MIN_Y = 200;
@@ -38,15 +35,20 @@ constexpr int TOUCH_RAW_MAX_Y = 3900;
 constexpr int TOUCH_MIN_Z     = 200;
 constexpr int TOUCH_MAX_Z     = 4000;
 
-constexpr uint16_t UI_BG      = 0x0000;
-constexpr uint16_t UI_TEXT    = 0xFFFF;
-constexpr uint16_t UI_DIM     = 0x8410;
-constexpr uint16_t UI_OK      = 0x07E0;
-constexpr uint16_t UI_WARN    = 0xFD20;
-constexpr uint16_t UI_FAULT   = 0xF800;
-constexpr uint16_t UI_BTN_ARM = 0x05E0;
-constexpr uint16_t UI_BTN_DIS = 0xC800;
-constexpr uint16_t UI_BTN_FIRE = 0xF800;
+constexpr uint16_t UI_BG          = 0x0000;
+constexpr uint16_t UI_TEXT        = 0xFFFF;
+constexpr uint16_t UI_DIM         = 0x8410;
+constexpr uint16_t UI_OK          = 0x07E0;
+constexpr uint16_t UI_WARN        = 0xFD20;
+constexpr uint16_t UI_FAULT       = 0xF800;
+constexpr uint16_t UI_ACCENT      = 0x04DF;
+constexpr uint16_t UI_PANEL       = 0x1082;
+constexpr uint16_t UI_BTN_ARM     = 0x05E0;
+constexpr uint16_t UI_BTN_DISARM  = 0xC800;
+constexpr uint16_t UI_BTN_ACTION  = 0x03EF;
+constexpr uint16_t UI_BTN_FIRE    = 0xF800;
+constexpr uint16_t UI_BTN_CANCEL  = 0x8410;
+constexpr uint16_t UI_BTN_ARROW   = 0x18C3;
 constexpr uint16_t UI_BTN_DISABLED = 0x4208;
 
 struct Rect {
@@ -58,6 +60,25 @@ struct Rect {
     bool contains(int16_t px, int16_t py) const {
         return px >= x && px < (x + w) && py >= y && py < (y + h);
     }
+};
+
+enum class UiScreen : uint8_t {
+    LINK_WAIT = 0,
+    DIAGNOSTICS_HOME,
+    WAITING_FOR_ARM,
+    STRATAGEM_ENTRY,
+    STRATAGEM_CONFIRM,
+    FIRE_IN_FLIGHT
+};
+
+struct UiViewModel {
+    UiScreen screen;
+    bool launcherReady;
+    bool activationAvailable;
+    bool confirmAvailable;
+    bool launcherFaulted;
+    bool stratagemActive;
+    bool hasActiveStratagem;
 };
 
 class CrowPanelDisplay : public lgfx::LGFX_Device {
@@ -123,30 +144,36 @@ XPT2046_Touchscreen gTouch(TOUCH_CS);
 DiagUiAction gPendingAction = DiagUiAction::NONE;
 bool gTouchReady = false;
 bool gTouchWasDown = false;
-int16_t gLastTouchX = -1;
-int16_t gLastTouchY = -1;
-uint32_t gLastDrawMs = 0;
 uint32_t gLastAgeDrawMs = 0;
-uint16_t gLastRxSeq = 0xFFFF;
-uint32_t gLastStatusRxMs = 0xFFFFFFFF;
+uint8_t gLauncherMac[6] = {0};
+
+UiScreen gLastScreen = UiScreen::LINK_WAIT;
+bool gHasLastFrame = false;
 bool gLastOnline = false;
 bool gLastArmed = false;
 bool gLastKey = false;
 bool gLastContinuityOk = false;
+ContinuityState gLastContinuityState = ContinuityState::UNKNOWN;
 bool gLastFirePermitted = false;
 LauncherSafetyState gLastState = LauncherSafetyState::BOOTING;
 LauncherEvent gLastEvent = LauncherEvent::NONE;
 FaultCode gLastFault = FaultCode::NONE;
-uint8_t gLauncherMac[6] = {0};
+StratagemInputState gLastInputState = StratagemInputState::IDLE;
+bool gLastStratagemModeRequested = false;
+bool gLastFireCommandInFlight = false;
+int gLastActiveStratagemId = -1;
+uint8_t gLastBufferLength = 0;
+bool gLastConfirmVisible = false;
 
-const Rect kFireButton   = { 396, 8, 72, 72 };
-const Rect kArmButton    = { 20, 248, 210, 56 };
-const Rect kDisarmButton = { 250, 248, 210, 56 };
-// Slightly expand touch targets around the visible buttons for easier bench use
-// while still keeping the action zones aligned to the rendered UI.
-const Rect kFireTouchZone   = { 388, 4, 84, 84 };
-const Rect kArmTouchZone    = { 12, 240, 226, 68 };
-const Rect kDisarmTouchZone = { 242, 240, 226, 68 };
+const Rect kArmButton      = { 20, 252, 136, 48 };
+const Rect kDisarmButton   = { 168, 252, 136, 48 };
+const Rect kActivateButton = { 320, 236, 140, 64 };
+const Rect kCancelButton   = { 20, 256, 140, 44 };
+const Rect kFireButton     = { 258, 236, 202, 64 };
+const Rect kArrowUpButton    = { 190, 126, 100, 60 };
+const Rect kArrowLeftButton  = { 74, 194, 100, 60 };
+const Rect kArrowDownButton  = { 190, 194, 100, 60 };
+const Rect kArrowRightButton = { 306, 194, 100, 60 };
 
 const char* yesNo(bool v) {
     return v ? "YES" : "NO";
@@ -205,33 +232,87 @@ const char* faultName(FaultCode fault) {
     }
 }
 
-uint16_t stateColor(const LauncherLinkState& link) {
-    if (!link.online) return UI_DIM;
-    switch (link.remoteState) {
-        case LauncherSafetyState::ARMED:    return UI_OK;
-        case LauncherSafetyState::FAULT:    return UI_FAULT;
-        case LauncherSafetyState::FIRING:
-        case LauncherSafetyState::FIRED:    return UI_WARN;
-        default:                            return UI_TEXT;
+const char* inputStateName(StratagemInputState state) {
+    switch (state) {
+        case StratagemInputState::IDLE:       return "IDLE";
+        case StratagemInputState::INPUTTING:  return "INPUT";
+        case StratagemInputState::MATCHED:    return "MATCHED";
+        case StratagemInputState::CONFIRMING: return "CONFIRM";
+        case StratagemInputState::FIRING:     return "FIRING";
+        default:                              return "?";
     }
 }
 
-void drawLabelValue(int16_t y, const char* label, const char* value, uint16_t valueColor = UI_TEXT) {
-    gDisplay.setTextColor(UI_DIM, UI_BG);
-    gDisplay.setCursor(20, y);
-    gDisplay.print(label);
-    gDisplay.setTextColor(valueColor, UI_BG);
-    gDisplay.setCursor(170, y);
-    gDisplay.print(value);
+const char* directionGlyph(Direction d) {
+    switch (d) {
+        case Direction::UP:    return "^";
+        case Direction::DOWN:  return "V";
+        case Direction::LEFT:  return "<";
+        case Direction::RIGHT: return ">";
+        default:               return "?";
+    }
 }
 
-void drawButton(const Rect& r, const char* label, uint16_t fill) {
-    gDisplay.fillRoundRect(r.x, r.y, r.w, r.h, 8, fill);
-    gDisplay.drawRoundRect(r.x, r.y, r.w, r.h, 8, UI_TEXT);
-    gDisplay.setTextColor(UI_TEXT, fill);
-    gDisplay.setTextDatum(textdatum_t::middle_center);
-    gDisplay.drawString(label, r.x + r.w / 2, r.y + r.h / 2);
-    gDisplay.setTextDatum(textdatum_t::top_left);
+uint16_t boolColor(bool v) {
+    return v ? UI_OK : UI_DIM;
+}
+
+uint16_t continuityColor(ContinuityState s) {
+    if (s == ContinuityState::PRESENT) return UI_OK;
+    if (s == ContinuityState::OPEN) return UI_WARN;
+    if (s == ContinuityState::SHORT_FAULT) return UI_FAULT;
+    return UI_DIM;
+}
+
+uint16_t launcherStateColor(const LauncherLinkState& link) {
+    if (!link.online) return UI_DIM;
+    switch (link.remoteState) {
+        case LauncherSafetyState::ARMED:  return UI_OK;
+        case LauncherSafetyState::FAULT:  return UI_FAULT;
+        case LauncherSafetyState::FIRING:
+        case LauncherSafetyState::FIRED:  return UI_WARN;
+        default:                          return UI_TEXT;
+    }
+}
+
+bool launcherReadyForActivation(const LauncherLinkState& link) {
+    return link.online &&
+           link.keySwitchOn &&
+           link.continuityOk &&
+           link.lastFaultCode == FaultCode::NONE;
+}
+
+UiViewModel buildViewModel(const LauncherLinkState& link,
+                          const StratagemEngineState& engine,
+                          bool stratagemModeRequested,
+                          bool fireCommandInFlight) {
+    UiViewModel vm = {};
+    vm.launcherReady = launcherReadyForActivation(link);
+    vm.activationAvailable = vm.launcherReady && !stratagemModeRequested;
+    vm.confirmAvailable = (engine.inputState == StratagemInputState::CONFIRMING);
+    vm.launcherFaulted = link.lastFaultCode != FaultCode::NONE || link.remoteState == LauncherSafetyState::FAULT;
+    vm.stratagemActive = stratagemModeRequested;
+    vm.hasActiveStratagem = engine.active.def != nullptr;
+
+    if (!link.online) {
+        vm.screen = UiScreen::LINK_WAIT;
+    } else if (fireCommandInFlight || link.remoteState == LauncherSafetyState::FIRING) {
+        vm.screen = UiScreen::FIRE_IN_FLIGHT;
+    } else if (stratagemModeRequested) {
+        if (!link.armed) {
+            vm.screen = UiScreen::WAITING_FOR_ARM;
+        } else if (engine.inputState == StratagemInputState::MATCHED ||
+                   engine.inputState == StratagemInputState::CONFIRMING ||
+                   engine.inputState == StratagemInputState::FIRING) {
+            vm.screen = UiScreen::STRATAGEM_CONFIRM;
+        } else {
+            vm.screen = UiScreen::STRATAGEM_ENTRY;
+        }
+    } else {
+        vm.screen = UiScreen::DIAGNOSTICS_HOME;
+    }
+
+    return vm;
 }
 
 void formatStatusAge(const LauncherLinkState& link, uint32_t now, char* out, size_t outSize) {
@@ -244,72 +325,267 @@ void formatStatusAge(const LauncherLinkState& link, uint32_t now, char* out, siz
     snprintf(out, outSize, "%lus", ageSeconds);
 }
 
-void drawStatusAgeRow(const LauncherLinkState& link, uint32_t now) {
-    char ageBuf[24];
-    formatStatusAge(link, now, ageBuf, sizeof(ageBuf));
-
-    gDisplay.startWrite();
-    gDisplay.fillRect(160, 232, 120, 16, UI_BG);
-    drawLabelValue(232, "STATUS AGE", ageBuf);
-    gDisplay.endWrite();
-}
-
-uint16_t fireButtonColor(const LauncherLinkState& link) {
-    return link.firePermitted ? UI_BTN_FIRE : UI_BTN_DISABLED;
-}
-
-void drawFrame(const LauncherLinkState& link, uint32_t now) {
-    gDisplay.startWrite();
-    gDisplay.fillScreen(UI_BG);
+void drawTitleBar(const char* title, const char* subtitle = nullptr) {
+    gDisplay.fillRect(0, 0, SCREEN_W, 42, UI_PANEL);
+    gDisplay.setTextColor(UI_TEXT, UI_PANEL);
     gDisplay.setTextFont(2);
-    gDisplay.setTextColor(UI_TEXT, UI_BG);
-    gDisplay.setCursor(20, 14);
-    gDisplay.print("TACTICAL LINK DIAGNOSTICS");
+    gDisplay.setCursor(16, 10);
+    gDisplay.print(title);
 
-    drawButton(kFireButton, "FIRE", fireButtonColor(link));
+    gDisplay.setTextColor(UI_DIM, UI_PANEL);
+    gDisplay.setCursor(314, 10);
+    gDisplay.print("CAMERA TBD");
 
-    char macBuf[24];
-    snprintf(macBuf, sizeof(macBuf), "%02X:%02X:%02X:%02X:%02X:%02X",
-             gLauncherMac[0], gLauncherMac[1], gLauncherMac[2],
-             gLauncherMac[3], gLauncherMac[4], gLauncherMac[5]);
+    if (subtitle != nullptr) {
+        gDisplay.setTextColor(UI_DIM, UI_BG);
+        gDisplay.setCursor(18, 48);
+        gDisplay.print(subtitle);
+    }
+}
+
+void drawButton(const Rect& r, const char* label, uint16_t fill, uint16_t textColor = UI_TEXT) {
+    gDisplay.fillRoundRect(r.x, r.y, r.w, r.h, 10, fill);
+    gDisplay.drawRoundRect(r.x, r.y, r.w, r.h, 10, UI_TEXT);
+    gDisplay.setTextColor(textColor, fill);
+    gDisplay.setTextDatum(textdatum_t::middle_center);
+    gDisplay.drawString(label, r.x + r.w / 2, r.y + r.h / 2);
+    gDisplay.setTextDatum(textdatum_t::top_left);
+}
+
+void drawStatusRow(int16_t x, int16_t y, const char* label, const char* value, uint16_t color = UI_TEXT) {
     gDisplay.setTextColor(UI_DIM, UI_BG);
-    gDisplay.setCursor(20, 34);
-    gDisplay.printf("Launcher: %s", macBuf);
+    gDisplay.setCursor(x, y);
+    gDisplay.print(label);
+    gDisplay.setTextColor(color, UI_BG);
+    gDisplay.setCursor(x + 108, y);
+    gDisplay.print(value);
+}
 
-    drawLabelValue(64, "ONLINE", yesNo(link.online), link.online ? UI_OK : UI_FAULT);
-    drawLabelValue(88, "STATE", stateName(link.remoteState), stateColor(link));
-    drawLabelValue(112, "KEY", yesNo(link.keySwitchOn), link.keySwitchOn ? UI_OK : UI_TEXT);
-    drawLabelValue(136, "ARMED", yesNo(link.armed), link.armed ? UI_OK : UI_TEXT);
-    drawLabelValue(160, "CONT", continuityName(link.continuityState), link.continuityState == ContinuityState::PRESENT ? UI_OK : (link.continuityState == ContinuityState::OPEN ? UI_WARN : UI_TEXT));
-    drawLabelValue(184, "EVENT", eventName(link.lastEvent));
-    drawLabelValue(208, "FAULT", faultName(link.lastFaultCode), link.lastFaultCode == FaultCode::NONE ? UI_TEXT : UI_FAULT);
+void drawReadinessPill(int16_t x, int16_t y, const char* label, bool ready, uint16_t onColor, const char* offLabel = "BLOCK") {
+    const int w = 104;
+    const int h = 28;
+    uint16_t fill = ready ? onColor : UI_BTN_DISABLED;
+    gDisplay.fillRoundRect(x, y, w, h, 8, fill);
+    gDisplay.drawRoundRect(x, y, w, h, 8, UI_TEXT);
+    gDisplay.setTextColor(UI_TEXT, fill);
+    gDisplay.setTextDatum(textdatum_t::middle_center);
+    gDisplay.drawString(ready ? label : offLabel, x + (w / 2), y + (h / 2));
+    gDisplay.setTextDatum(textdatum_t::top_left);
+}
+
+void drawHomeScreen(const LauncherLinkState& link, const UiViewModel& vm, uint32_t now) {
+    drawTitleBar("TACTICAL LINK", "Launcher diagnostics and launch readiness");
+
+    gDisplay.drawRoundRect(12, 72, 456, 146, 12, UI_ACCENT);
+    drawStatusRow(24, 86,  "ONLINE", yesNo(link.online), boolColor(link.online));
+    drawStatusRow(24, 110, "STATE", stateName(link.remoteState), launcherStateColor(link));
+    drawStatusRow(24, 134, "KEY", yesNo(link.keySwitchOn), boolColor(link.keySwitchOn));
+    drawStatusRow(24, 158, "CONT", continuityName(link.continuityState), continuityColor(link.continuityState));
+    drawStatusRow(24, 182, "FAULT", faultName(link.lastFaultCode), link.lastFaultCode == FaultCode::NONE ? UI_TEXT : UI_FAULT);
+
+    drawStatusRow(244, 86,  "ARMED", yesNo(link.armed), boolColor(link.armed));
+    drawStatusRow(244, 110, "EVENT", eventName(link.lastEvent));
+    drawStatusRow(244, 134, "CAN FIRE", yesNo(link.firePermitted), boolColor(link.firePermitted));
+    drawStatusRow(244, 158, "INPUT", "READY", vm.activationAvailable ? UI_OK : UI_DIM);
 
     char ageBuf[24];
     formatStatusAge(link, now, ageBuf, sizeof(ageBuf));
-    drawLabelValue(232, "STATUS AGE", ageBuf);
+    drawStatusRow(244, 182, "STATUS AGE", ageBuf);
+
+    gDisplay.setTextColor(UI_DIM, UI_BG);
+    gDisplay.setCursor(20, 226);
+    gDisplay.print("READY GATES");
+    drawReadinessPill(20, 226,  "LINK", link.online, UI_OK);
+    drawReadinessPill(132, 226, "KEY", link.keySwitchOn, UI_OK);
+    drawReadinessPill(244, 226, "CONT", link.continuityOk, UI_OK);
+    drawReadinessPill(356, 226, "CLEAR", link.lastFaultCode == FaultCode::NONE, UI_OK, "FAULT");
 
     drawButton(kArmButton, "ARM", UI_BTN_ARM);
-    drawButton(kDisarmButton, "DISARM", UI_BTN_DIS);
+    drawButton(kDisarmButton, "DISARM", UI_BTN_DISARM);
+
+    if (vm.activationAvailable) {
+        drawButton(kActivateButton, "ACTIVATE STRATAGEM", UI_BTN_ACTION);
+    } else {
+        drawButton(kActivateButton, "STRATAGEM LOCKED", UI_BTN_DISABLED);
+    }
+}
+
+void drawWaitingForArmScreen(const LauncherLinkState& link,
+                             const StratagemEngineState& engine,
+                             const UiViewModel&) {
+    drawTitleBar("ACTIVATING STRATAGEM", "Waiting for launcher ARM state");
+
+    gDisplay.setTextColor(UI_TEXT, UI_BG);
+    gDisplay.setTextDatum(textdatum_t::middle_center);
+    gDisplay.drawString("ESTABLISHING LAUNCH WINDOW", SCREEN_W / 2, 108);
+    gDisplay.setTextColor(UI_DIM, UI_BG);
+    gDisplay.drawString(link.keySwitchOn ? "Remote ARM requested" : "Key/interlock not ready", SCREEN_W / 2, 138);
+
+    if (engine.active.def != nullptr) {
+        gDisplay.setTextColor(UI_ACCENT, UI_BG);
+        gDisplay.drawString(engine.active.def->name, SCREEN_W / 2, 176);
+    }
+
+    gDisplay.setTextColor(UI_DIM, UI_BG);
+    gDisplay.drawString(stateName(link.remoteState), SCREEN_W / 2, 208);
+    gDisplay.setTextDatum(textdatum_t::top_left);
+
+    drawButton(kCancelButton, "CANCEL", UI_BTN_CANCEL);
+}
+
+void drawSequenceBoxes(const StratagemEngineState& engine) {
+    if (engine.active.def == nullptr) return;
+
+    const int boxW = 48;
+    const int boxH = 44;
+    const int gap = 10;
+    const int totalW = (engine.active.def->length * boxW) + ((engine.active.def->length - 1) * gap);
+    int startX = (SCREEN_W - totalW) / 2;
+    int y = 96;
+
+    for (uint8_t i = 0; i < engine.active.def->length; i++) {
+        bool complete = i < engine.buffer.length;
+        uint16_t fill = complete ? UI_OK : UI_PANEL;
+        gDisplay.fillRoundRect(startX + (i * (boxW + gap)), y, boxW, boxH, 8, fill);
+        gDisplay.drawRoundRect(startX + (i * (boxW + gap)), y, boxW, boxH, 8, UI_TEXT);
+        gDisplay.setTextColor(UI_TEXT, fill);
+        gDisplay.setTextDatum(textdatum_t::middle_center);
+        gDisplay.drawString(directionGlyph(engine.active.def->sequence[i]),
+                            startX + (i * (boxW + gap)) + (boxW / 2),
+                            y + (boxH / 2));
+    }
+
+    gDisplay.setTextDatum(textdatum_t::top_left);
+}
+
+void drawArrowButtons() {
+    drawButton(kArrowUpButton,    "UP",    UI_BTN_ARROW);
+    drawButton(kArrowLeftButton,  "LEFT",  UI_BTN_ARROW);
+    drawButton(kArrowDownButton,  "DOWN",  UI_BTN_ARROW);
+    drawButton(kArrowRightButton, "RIGHT", UI_BTN_ARROW);
+}
+
+void drawEntryScreen(const LauncherLinkState& link,
+                     const StratagemEngineState& engine,
+                     const UiViewModel&) {
+    drawTitleBar("STRATAGEM ENTRY", "Complete the full input sequence");
+
+    if (engine.active.def != nullptr) {
+        gDisplay.setTextColor(UI_ACCENT, UI_BG);
+        gDisplay.setTextDatum(textdatum_t::middle_center);
+        gDisplay.drawString(engine.active.def->name, SCREEN_W / 2, 72);
+        gDisplay.setTextDatum(textdatum_t::top_left);
+    }
+
+    drawSequenceBoxes(engine);
+    drawArrowButtons();
+
+    gDisplay.setTextColor(UI_DIM, UI_BG);
+    gDisplay.setCursor(20, 266);
+    gDisplay.printf("STATE %s  |  LINK %s  |  CONT %s",
+                    inputStateName(engine.inputState),
+                    yesNo(link.online),
+                    continuityName(link.continuityState));
+
+    drawButton(kCancelButton, "CANCEL", UI_BTN_CANCEL);
+}
+
+void drawConfirmScreen(const LauncherLinkState& link,
+                       const StratagemEngineState& engine,
+                       const UiViewModel& vm) {
+    drawTitleBar("CONFIRM STRATAGEM", "Launcher armed, confirm before fire");
+
+    gDisplay.setTextColor(UI_TEXT, UI_BG);
+    gDisplay.setTextDatum(textdatum_t::middle_center);
+    if (engine.active.def != nullptr) {
+        gDisplay.drawString(engine.active.def->name, SCREEN_W / 2, 74);
+    }
+
+    gDisplay.setTextColor(vm.confirmAvailable ? UI_OK : UI_WARN, UI_BG);
+    gDisplay.drawString(vm.confirmAvailable ? "FIRE WINDOW OPEN" : "LOCKING STRATAGEM", SCREEN_W / 2, 114);
+
+    gDisplay.setTextColor(UI_DIM, UI_BG);
+    gDisplay.drawString(stateName(link.remoteState), SCREEN_W / 2, 146);
+    gDisplay.setTextDatum(textdatum_t::top_left);
+
+    drawSequenceBoxes(engine);
+    drawButton(kCancelButton, "ABORT STRATAGEM", UI_BTN_CANCEL);
+    drawButton(kFireButton,
+               vm.confirmAvailable ? "FIRE MISSILE" : "FIRE LOCKED",
+               vm.confirmAvailable ? UI_BTN_FIRE : UI_BTN_DISABLED);
+}
+
+void drawFireInFlightScreen(const LauncherLinkState& link,
+                            const StratagemEngineState& engine) {
+    drawTitleBar("FIRE IN FLIGHT", "Repeat taps locked out");
+
+    gDisplay.setTextColor(UI_FAULT, UI_BG);
+    gDisplay.setTextDatum(textdatum_t::middle_center);
+    gDisplay.drawString("!! FIRING MISSILE !!", SCREEN_W / 2, 118);
+    gDisplay.setTextColor(UI_TEXT, UI_BG);
+    if (engine.active.def != nullptr) {
+        gDisplay.drawString(engine.active.def->name, SCREEN_W / 2, 154);
+    }
+    gDisplay.setTextColor(UI_DIM, UI_BG);
+    gDisplay.drawString(stateName(link.remoteState), SCREEN_W / 2, 188);
+    gDisplay.drawString(eventName(link.lastEvent), SCREEN_W / 2, 220);
+    gDisplay.setTextDatum(textdatum_t::top_left);
+}
+
+void drawLinkWaitScreen() {
+    drawTitleBar("TACTICAL LINK", "Waiting for launcher heartbeat");
+    gDisplay.setTextColor(UI_TEXT, UI_BG);
+    gDisplay.setTextDatum(textdatum_t::middle_center);
+    gDisplay.drawString("ESTABLISHING TACTICAL LAUNCHER LINK", SCREEN_W / 2, 132);
+    gDisplay.setTextColor(UI_DIM, UI_BG);
+    gDisplay.drawString("Camera tab remains placeholder in GUI v1", SCREEN_W / 2, 172);
+    gDisplay.setTextDatum(textdatum_t::top_left);
+}
+
+void drawFrame(const LauncherLinkState& link,
+               const StratagemEngineState& engine,
+               bool stratagemModeRequested,
+               bool fireCommandInFlight,
+               uint32_t now) {
+    const UiViewModel vm = buildViewModel(link, engine, stratagemModeRequested, fireCommandInFlight);
+
+    gDisplay.startWrite();
+    gDisplay.fillScreen(UI_BG);
+
+    switch (vm.screen) {
+        case UiScreen::LINK_WAIT:
+            drawLinkWaitScreen();
+            break;
+        case UiScreen::DIAGNOSTICS_HOME:
+            drawHomeScreen(link, vm, now);
+            break;
+        case UiScreen::WAITING_FOR_ARM:
+            drawWaitingForArmScreen(link, engine, vm);
+            break;
+        case UiScreen::STRATAGEM_ENTRY:
+            drawEntryScreen(link, engine, vm);
+            break;
+        case UiScreen::STRATAGEM_CONFIRM:
+            drawConfirmScreen(link, engine, vm);
+            break;
+        case UiScreen::FIRE_IN_FLIGHT:
+            drawFireInFlightScreen(link, engine);
+            break;
+    }
+
     gDisplay.endWrite();
 }
 
 bool mapTouchPoint(const TS_Point& p, int16_t& outX, int16_t& outY) {
-    if (p.z < TOUCH_MIN_Z) return false;
-    if (p.z >= TOUCH_MAX_Z) return false;
+    if (p.z < TOUCH_MIN_Z || p.z >= TOUCH_MAX_Z) return false;
     if (p.x == 0 && p.y == 0) return false;
-
     if (p.x < TOUCH_RAW_MIN_X || p.x > TOUCH_RAW_MAX_X ||
         p.y < TOUCH_RAW_MIN_Y || p.y > TOUCH_RAW_MAX_Y) {
         return false;
     }
 
-    // Bench trace from the actual CrowPanel showed a left-to-right swipe across
-    // the ARM button changing raw X heavily while raw Y stayed nearly fixed.
-    // That means the previous swap was wrong for this unit. Use each raw axis
-    // directly, with both axes inverted for the current panel orientation.
     long sx = map(p.x, TOUCH_RAW_MAX_X, TOUCH_RAW_MIN_X, 0, SCREEN_W - 1);
     long sy = map(p.y, TOUCH_RAW_MAX_Y, TOUCH_RAW_MIN_Y, 0, SCREEN_H - 1);
-
     sx = constrain(sx, 0, SCREEN_W - 1);
     sy = constrain(sy, 0, SCREEN_H - 1);
     outX = (int16_t)sx;
@@ -317,14 +593,68 @@ bool mapTouchPoint(const TS_Point& p, int16_t& outX, int16_t& outY) {
     return true;
 }
 
-void serviceTouch() {
+void queueActionForTouch(int16_t x,
+                         int16_t y,
+                         const LauncherLinkState& link,
+                         const StratagemEngineState& engine,
+                         bool stratagemModeRequested,
+                         bool fireCommandInFlight) {
+    const UiViewModel vm = buildViewModel(link, engine, stratagemModeRequested, fireCommandInFlight);
+
+    switch (vm.screen) {
+        case UiScreen::DIAGNOSTICS_HOME:
+            if (kArmButton.contains(x, y)) {
+                gPendingAction = DiagUiAction::ARM;
+            } else if (kDisarmButton.contains(x, y)) {
+                gPendingAction = DiagUiAction::DISARM;
+            } else if (vm.activationAvailable && kActivateButton.contains(x, y)) {
+                gPendingAction = DiagUiAction::ACTIVATE;
+            }
+            break;
+
+        case UiScreen::WAITING_FOR_ARM:
+            if (kCancelButton.contains(x, y)) {
+                gPendingAction = DiagUiAction::CANCEL;
+            }
+            break;
+
+        case UiScreen::STRATAGEM_ENTRY:
+            if (kCancelButton.contains(x, y)) {
+                gPendingAction = DiagUiAction::CANCEL;
+            } else if (kArrowUpButton.contains(x, y)) {
+                gPendingAction = DiagUiAction::DIR_UP;
+            } else if (kArrowLeftButton.contains(x, y)) {
+                gPendingAction = DiagUiAction::DIR_LEFT;
+            } else if (kArrowDownButton.contains(x, y)) {
+                gPendingAction = DiagUiAction::DIR_DOWN;
+            } else if (kArrowRightButton.contains(x, y)) {
+                gPendingAction = DiagUiAction::DIR_RIGHT;
+            }
+            break;
+
+        case UiScreen::STRATAGEM_CONFIRM:
+            if (kCancelButton.contains(x, y)) {
+                gPendingAction = DiagUiAction::CANCEL;
+            } else if (vm.confirmAvailable && kFireButton.contains(x, y)) {
+                gPendingAction = DiagUiAction::FIRE;
+            }
+            break;
+
+        case UiScreen::FIRE_IN_FLIGHT:
+        case UiScreen::LINK_WAIT:
+            break;
+    }
+}
+
+void serviceTouch(const LauncherLinkState& link,
+                  const StratagemEngineState& engine,
+                  bool stratagemModeRequested,
+                  bool fireCommandInFlight) {
     if (!gTouchReady) return;
 
     bool touching = gTouch.touched();
     if (!touching) {
         gTouchWasDown = false;
-        gLastTouchX = -1;
-        gLastTouchY = -1;
         return;
     }
 
@@ -333,51 +663,60 @@ void serviceTouch() {
     int16_t y = 0;
     bool valid = mapTouchPoint(p, x, y);
     bool isNewTouch = !gTouchWasDown;
-
     gTouchWasDown = true;
-    gLastTouchX = x;
-    gLastTouchY = y;
 
-    if (!valid) return;
+    if (!valid || !isNewTouch) return;
 
-    if (!isNewTouch) return;
-
-    if (kFireTouchZone.contains(x, y)) {
-        gPendingAction = DiagUiAction::FIRE;
-        Serial.println("[WRIST/UI] FIRE zone pressed");
-    } else if (kArmTouchZone.contains(x, y)) {
-        gPendingAction = DiagUiAction::ARM;
-        Serial.println("[WRIST/UI] ARM zone pressed");
-    } else if (kDisarmTouchZone.contains(x, y)) {
-        gPendingAction = DiagUiAction::DISARM;
-        Serial.println("[WRIST/UI] DISARM zone pressed");
-    }
+    queueActionForTouch(x, y, link, engine, stratagemModeRequested, fireCommandInFlight);
 }
 
-bool shouldRedraw(const LauncherLinkState& link, uint32_t now) {
+bool shouldRedraw(const LauncherLinkState& link,
+                  const StratagemEngineState& engine,
+                  bool stratagemModeRequested,
+                  bool fireCommandInFlight) {
+    const UiViewModel vm = buildViewModel(link, engine, stratagemModeRequested, fireCommandInFlight);
+
+    if (!gHasLastFrame) return true;
+    if (vm.screen != gLastScreen) return true;
     if (link.online != gLastOnline) return true;
     if (link.armed != gLastArmed) return true;
     if (link.keySwitchOn != gLastKey) return true;
     if (link.continuityOk != gLastContinuityOk) return true;
+    if (link.continuityState != gLastContinuityState) return true;
     if (link.firePermitted != gLastFirePermitted) return true;
     if (link.remoteState != gLastState) return true;
     if (link.lastEvent != gLastEvent) return true;
     if (link.lastFaultCode != gLastFault) return true;
+    if (engine.inputState != gLastInputState) return true;
+    if (stratagemModeRequested != gLastStratagemModeRequested) return true;
+    if (fireCommandInFlight != gLastFireCommandInFlight) return true;
+    if ((engine.active.def ? engine.active.def->id : -1) != gLastActiveStratagemId) return true;
+    if (engine.buffer.length != gLastBufferLength) return true;
+    if (engine.confirmVisible != gLastConfirmVisible) return true;
     return false;
 }
 
-void rememberState(const LauncherLinkState& link, uint32_t now) {
-    gLastDrawMs = now;
+void rememberFrame(const LauncherLinkState& link,
+                   const StratagemEngineState& engine,
+                   bool stratagemModeRequested,
+                   bool fireCommandInFlight) {
+    gHasLastFrame = true;
+    gLastScreen = buildViewModel(link, engine, stratagemModeRequested, fireCommandInFlight).screen;
     gLastOnline = link.online;
     gLastArmed = link.armed;
     gLastKey = link.keySwitchOn;
     gLastContinuityOk = link.continuityOk;
+    gLastContinuityState = link.continuityState;
     gLastFirePermitted = link.firePermitted;
     gLastState = link.remoteState;
     gLastEvent = link.lastEvent;
     gLastFault = link.lastFaultCode;
-    gLastRxSeq = link.lastRxSeq;
-    gLastStatusRxMs = link.lastStatusRxMs;
+    gLastInputState = engine.inputState;
+    gLastStratagemModeRequested = stratagemModeRequested;
+    gLastFireCommandInFlight = fireCommandInFlight;
+    gLastActiveStratagemId = engine.active.def ? engine.active.def->id : -1;
+    gLastBufferLength = engine.buffer.length;
+    gLastConfirmVisible = engine.confirmVisible;
 }
 } // namespace
 
@@ -397,31 +736,35 @@ void diag_ui_init(const uint8_t launcherMac[6]) {
     gDisplay.setTextFont(2);
     gDisplay.setTextColor(UI_TEXT, UI_BG);
     gDisplay.setCursor(20, 20);
-    gDisplay.println("TACTICAL LINK DIAGNOSTICS");
+    gDisplay.println("TACTICAL LINK");
     gDisplay.setTextColor(UI_DIM, UI_BG);
     gDisplay.setCursor(20, 48);
     gDisplay.println("Display init OK");
 
-    // XPT2046_Touchscreen::begin() calls SPI.begin() with default board pins,
-    // which breaks the CrowPanel's custom SPI wiring on ESP32. Let it set up
-    // CS first, then immediately restore the CrowPanel SPI pin mapping.
     gTouch.begin();
     SPI.begin(TFT_SCLK, TFT_MISO, TFT_MOSI, TOUCH_CS);
     gTouch.setRotation(SCREEN_ROTATION);
     gTouchReady = true;
+
     Serial.println("[WRIST/UI] Display init OK");
     Serial.println("[WRIST/UI] Touch init OK (first-pass calibration)");
 }
 
-void diag_ui_tick(const LauncherLinkState& link, uint32_t now) {
-    serviceTouch();
+void diag_ui_tick(const LauncherLinkState& link,
+                  const StratagemEngineState& engine,
+                  bool stratagemModeRequested,
+                  bool fireCommandInFlight,
+                  uint32_t now) {
+    serviceTouch(link, engine, stratagemModeRequested, fireCommandInFlight);
 
-    if (shouldRedraw(link, now)) {
-        drawFrame(link, now);
-        rememberState(link, now);
+    if (shouldRedraw(link, engine, stratagemModeRequested, fireCommandInFlight)) {
+        drawFrame(link, engine, stratagemModeRequested, fireCommandInFlight, now);
+        rememberFrame(link, engine, stratagemModeRequested, fireCommandInFlight);
         gLastAgeDrawMs = now;
-    } else if (now - gLastAgeDrawMs >= 1000) {
-        drawStatusAgeRow(link, now);
+    } else if (buildViewModel(link, engine, stratagemModeRequested, fireCommandInFlight).screen == UiScreen::DIAGNOSTICS_HOME &&
+               now - gLastAgeDrawMs >= 1000) {
+        drawFrame(link, engine, stratagemModeRequested, fireCommandInFlight, now);
+        rememberFrame(link, engine, stratagemModeRequested, fireCommandInFlight);
         gLastAgeDrawMs = now;
     }
 }

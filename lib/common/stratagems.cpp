@@ -104,15 +104,29 @@ const StratagemDef* LAUNCH_POOL[LAUNCH_POOL_SIZE] = {};
 
 static bool poolBuilt = false;
 
-static void buildLaunchPool() {
+void ensureLaunchPoolBuilt() {
     if (poolBuilt) return;
+
     int idx = 0;
     for (int i = 0; i < STRATAGEM_DB_SIZE && idx < LAUNCH_POOL_SIZE; i++) {
         if (STRATAGEM_DB[i].inLaunchPool) {
             LAUNCH_POOL[idx++] = &STRATAGEM_DB[i];
         }
     }
+
     poolBuilt = true;
+}
+
+int getLaunchPoolCount() {
+    ensureLaunchPoolBuilt();
+
+    int count = 0;
+    for (int i = 0; i < LAUNCH_POOL_SIZE; i++) {
+        if (LAUNCH_POOL[i] != nullptr) {
+            count++;
+        }
+    }
+    return count;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
