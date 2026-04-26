@@ -18,6 +18,7 @@ static uint32_t gFireCommandStartedAtMs = 0;
 
 static bool launcherReadyForActivation() {
     return gLink.online &&
+           gLink.armed &&
            gLink.keySwitchOn &&
            gLink.continuityOk &&
            gLink.lastFaultCode == FaultCode::NONE;
@@ -203,9 +204,6 @@ static void handleUiAction(DiagUiAction uiAction, uint32_t now) {
             if (!gStratagemModeRequested) {
                 Serial.println("[WRIST] Activate blocked, launch pool empty");
                 break;
-            }
-            if (!gLink.armed) {
-                launcher_link_sendArmSet(gLink, true);
             }
             break;
 
