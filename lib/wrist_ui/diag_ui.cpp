@@ -168,17 +168,17 @@ uint8_t gLastBufferLength = 0;
 bool gLastConfirmVisible = false;
 bool gLastShowHomeDetails = false;
 
-const Rect kArmToggleButton  = { 20, 206, 272, 46 };
-const Rect kDetailsButton    = { 308, 206, 152, 46 };
-const Rect kActivateButton   = { 20, 260, 440, 48 };
+const Rect kArmToggleButton  = { 20, 140, 180, 112 };
+const Rect kDetailsButton    = { 20, 262, 180, 46 };
+const Rect kActivateButton   = { 220, 140, 240, 168 };
 const Rect kBackButton       = { 20, 262, 140, 42 };
-const Rect kCancelButton     = { 330, 18, 130, 40 };
+const Rect kCancelButton     = { 392, 10, 60, 60 };
 const Rect kConfirmAbortButton = { 20, 256, 180, 48 };
 const Rect kFireButton       = { 220, 248, 240, 56 };
-const Rect kArrowUpButton    = { 176, 134, 128, 58 };
-const Rect kArrowLeftButton  = { 38, 206, 128, 58 };
-const Rect kArrowDownButton  = { 176, 206, 128, 58 };
-const Rect kArrowRightButton = { 314, 206, 128, 58 };
+const Rect kArrowUpButton    = { 176, 154, 128, 58 };
+const Rect kArrowLeftButton  = { 38, 226, 128, 58 };
+const Rect kArrowDownButton  = { 176, 226, 128, 58 };
+const Rect kArrowRightButton = { 314, 226, 128, 58 };
 
 const char* yesNo(bool v) {
     return v ? "YES" : "NO";
@@ -332,8 +332,8 @@ void formatStatusAge(const LauncherLinkState& link, uint32_t now, char* out, siz
         return;
     }
 
-    unsigned long ageSeconds = (unsigned long)((now - link.lastStatusRxMs) / 1000UL);
-    snprintf(out, outSize, "%lus", ageSeconds);
+    unsigned long ageTenths = (unsigned long)((now - link.lastStatusRxMs) / 100UL);
+    snprintf(out, outSize, "%lu.%lus", ageTenths / 10UL, ageTenths % 10UL);
 }
 
 void drawTitleBar(const char* title, const char* subtitle = nullptr) {
@@ -365,6 +365,15 @@ void drawCompactHeader(const char* title, const char* subtitle = nullptr) {
         gDisplay.setCursor(18, 38);
         gDisplay.print(subtitle);
     }
+}
+
+void drawLinkOnlineBanner(const LauncherLinkState& link) {
+    if (!link.online) return;
+
+    gDisplay.setTextColor(UI_OK, UI_BG);
+    gDisplay.setTextDatum(textdatum_t::top_right);
+    gDisplay.drawString("LINK ONLINE", SCREEN_W - 18, 14);
+    gDisplay.setTextDatum(textdatum_t::top_left);
 }
 
 void drawButton(const Rect& r, const char* label, uint16_t fill, uint16_t textColor = UI_TEXT) {
@@ -435,29 +444,17 @@ void drawStatusAgeRow(uint32_t now, const LauncherLinkState& link) {
 
 void drawHomeScreen(const LauncherLinkState& link, const UiViewModel& vm, uint32_t now) {
     (void)now;
-    drawCompactHeader("TACTICAL LINK", "Main launcher gates and controls");
+    drawCompactHeader("TACTICAL LINK", "Launcher status and controls");
+    drawLinkOnlineBanner(link);
 
-    const Rect chipLink   = { 20, 72, 138, 52 };
-    const Rect chipKey    = { 170, 72, 138, 52 };
-    const Rect chipArmed  = { 320, 72, 140, 52 };
-    const Rect chipCont   = { 20, 136, 138, 52 };
-    const Rect chipFault  = { 170, 136, 138, 52 };
-    const Rect chipFire   = { 320, 136, 140, 52 };
-
-    drawCompactStatusChip(chipLink,  "LINK",  link.online ? "ONLINE" : "OFFLINE", boolColor(link.online));
-    drawCompactStatusChip(chipKey,   "KEY",   link.keySwitchOn ? "ARM" : "SAFE", boolColor(link.keySwitchOn));
-    drawCompactStatusChip(chipArmed, "ARMED", link.armed ? "YES" : "NO", boolColor(link.armed));
-    drawCompactStatusChip(chipCont,  "CONT",  continuityName(link.continuityState), continuityColor(link.continuityState));
-    drawCompactStatusChip(chipFault, "FAULT", link.lastFaultCode == FaultCode::NONE ? "CLEAR" : "FAULT",
+    const int bubbleY = 78;
+    const int bubbleW = 106;
+    const int bubbleH = 52;
+    drawCompactStatusChip({20,  bubbleY, bubbleW, bubbleH}, "KEY",   link.keySwitchOn ? "ARM" : "SAFE", boolColor(link.keySwitchOn));
+    drawCompactStatusChip({134, bubbleY, bubbleW, bubbleH}, "ARMED", link.armed ? "YES" : "NO", boolColor(link.armed));
+    drawCompactStatusChip({248, bubbleY, bubbleW, bubbleH}, "CONT",  continuityName(link.continuityState), continuityColor(link.continuityState));
+    drawCompactStatusChip({362, bubbleY, bubbleW, bubbleH}, "FAULT", faultName(link.lastFaultCode),
                           link.lastFaultCode == FaultCode::NONE ? UI_OK : UI_FAULT);
-    drawCompactStatusChip(chipFire,  "FIRE",  link.firePermitted ? "READY" : "LOCKED",
-                          link.firePermitted ? UI_OK : UI_DIM);
-
-    gDisplay.setTextColor(UI_DIM, UI_BG);
-    gDisplay.setCursor(20, 196);
-    gDisplay.printf("STATE %s", stateName(link.remoteState));
-    gDisplay.setCursor(220, 196);
-    gDisplay.printf("EVENT %s", eventName(link.lastEvent));
 
     drawButton(kArmToggleButton,
                link.armed ? "DISARM LAUNCHER" : "ARM LAUNCHER",
@@ -473,6 +470,7 @@ void drawHomeScreen(const LauncherLinkState& link, const UiViewModel& vm, uint32
 
 void drawHomeDetailsScreen(const LauncherLinkState& link, uint32_t now) {
     drawCompactHeader("SYSTEM DETAILS", "Detailed launcher status");
+    drawLinkOnlineBanner(link);
 
     gDisplay.drawRoundRect(16, 70, 448, 176, 12, UI_ACCENT);
     drawStatusRow(28, 86,  "ONLINE", yesNo(link.online), boolColor(link.online));

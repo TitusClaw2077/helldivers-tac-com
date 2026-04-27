@@ -34,6 +34,14 @@ static bool launcherReadyForFire() {
            gLink.lastFaultCode == FaultCode::NONE;
 }
 
+static void applyLocalDisarmUiState(const char* reason) {
+    gLink.armed = false;
+    gLink.firePermitted = false;
+    gLink.remoteState = LauncherSafetyState::DISARMED;
+    gLink.lastEvent = LauncherEvent::DISARMED_OK;
+    Serial.printf("[WRIST] Local disarm UI state applied: %s\n", reason);
+}
+
 static void clearStratagemFlow(const char* reason) {
     if (gStratagemModeRequested || gEngine.active.def != nullptr || gFireSequenceStarted) {
         Serial.printf("[WRIST] Clearing stratagem flow: %s\n", reason);
@@ -151,6 +159,7 @@ static void handleSerialConsole() {
     } else if (cmd == "disarm") {
         Serial.println("[WRIST] Serial command: DISARM");
         launcher_link_sendArmSet(gLink, false);
+        applyLocalDisarmUiState("serial disarm");
         clearStratagemFlow("serial disarm");
     } else if (cmd == "fire") {
         if (gEngine.inputState == StratagemInputState::CONFIRMING) {
@@ -190,6 +199,7 @@ static void handleUiAction(DiagUiAction uiAction, uint32_t now) {
         case DiagUiAction::DISARM:
             Serial.println("[WRIST] UI action: DISARM");
             launcher_link_sendArmSet(gLink, false);
+            applyLocalDisarmUiState("ui disarm");
             clearStratagemFlow("ui disarm");
             break;
 
@@ -210,6 +220,7 @@ static void handleUiAction(DiagUiAction uiAction, uint32_t now) {
         case DiagUiAction::CANCEL:
             Serial.println("[WRIST] UI action: CANCEL STRATAGEM");
             launcher_link_sendArmSet(gLink, false);
+            applyLocalDisarmUiState("ui cancel");
             clearStratagemFlow("ui cancel");
             break;
 
