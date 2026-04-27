@@ -16,7 +16,7 @@
 
 // ─── Output checkpoint / ignition timing ─────────────────────────────────────
 #define OUTPUT_INDICATOR_PULSE_DURATION_MS 5000  // completed LED-checkpoint stage pulse; no longer the active accepted-fire path
-#define IGNITION_PULSE_DURATION_MS         1000  // MOSFET dummy-load stage on-time on GPIO26
+#define IGNITION_PULSE_DURATION_MS          750  // MOSFET dummy-load stage on-time on GPIO26
 #define POST_FIRE_COOLDOWN_MS              2000  // time in FIRED state before DISARMED
 
 // ─── Stratagem input ─────────────────────────────────────────────────────────
