@@ -882,7 +882,7 @@ void diag_ui_tick(const LauncherLinkState& link,
         drawFrame(link, engine, stratagemModeRequested, fireCommandInFlight, now);
         rememberFrame(link, engine, stratagemModeRequested, fireCommandInFlight);
         gLastDetailsAgeRefreshMs = now;
-    } else if (vm.screen == UiScreen::DIAGNOSTICS_HOME && vm.activationAvailable != gLastActivationAvailable) {
+    } else if (vm.screen == UiScreen::DIAGNOSTICS_HOME) {
         gDisplay.startWrite();
         drawHomeStratagemButton(vm);
         gDisplay.endWrite();
