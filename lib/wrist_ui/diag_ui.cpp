@@ -169,12 +169,12 @@ uint8_t gLastBufferLength = 0;
 bool gLastConfirmVisible = false;
 bool gLastShowHomeDetails = false;
 
-const Rect kArmToggleButton  = { 20, 140, 180, 112 };
-const Rect kDetailsButton    = { 20, 262, 180, 46 };
+const Rect kArmToggleButton  = { 20, 140, 188, 112 };
+const Rect kDetailsButton    = { 20, 262, 188, 46 };
 const Rect kActivateButton   = { 220, 140, 248, 168 };
 const Rect kBackButton       = { 20, 262, 140, 42 };
 const Rect kCancelButton     = { 380, 8, 72, 72 };
-const Rect kConfirmAbortButton = { 20, 256, 180, 48 };
+const Rect kConfirmAbortButton = { 20, 248, 188, 56 };
 const Rect kFireButton       = { 220, 248, 240, 56 };
 const Rect kArrowUpButton    = { 172, 162, 136, 64 };
 const Rect kArrowLeftButton  = { 24, 238, 136, 64 };
@@ -582,6 +582,7 @@ void drawConfirmScreen(const LauncherLinkState& link,
     drawSequenceBoxes(engine);
 
     gDisplay.setTextColor(vm.confirmAvailable ? UI_OK : UI_WARN, UI_BG);
+    gDisplay.setTextDatum(textdatum_t::middle_center);
     gDisplay.drawString(vm.confirmAvailable ? "FIRE WINDOW OPEN" : "LOCKING STRATAGEM", SCREEN_W / 2, 154);
 
     gDisplay.setTextColor(UI_DIM, UI_BG);
@@ -617,7 +618,7 @@ void drawLinkWaitScreen() {
     gDisplay.setTextDatum(textdatum_t::middle_center);
     gDisplay.drawString("ESTABLISHING TACTICAL LAUNCHER LINK", SCREEN_W / 2, 132);
     gDisplay.setTextColor(UI_DIM, UI_BG);
-    gDisplay.drawString("Camera tab remains placeholder in GUI v1", SCREEN_W / 2, 172);
+    gDisplay.drawString("Waiting for launcher heartbeat", SCREEN_W / 2, 172);
     gDisplay.setTextDatum(textdatum_t::top_left);
 }
 
