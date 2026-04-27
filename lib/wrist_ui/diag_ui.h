@@ -24,3 +24,4 @@ void diag_ui_tick(const LauncherLinkState& link,
                   bool fireCommandInFlight,
                   uint32_t now);
 DiagUiAction diag_ui_takeAction();
+void diag_ui_requestFullRedraw();

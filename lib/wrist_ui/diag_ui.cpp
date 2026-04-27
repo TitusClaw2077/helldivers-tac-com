@@ -882,3 +882,7 @@ DiagUiAction diag_ui_takeAction() {
     gPendingAction = DiagUiAction::NONE;
     return action;
 }
+
+void diag_ui_requestFullRedraw() {
+    gHasLastFrame = false;
+}

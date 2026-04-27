@@ -332,6 +332,7 @@ void loop() {
     handleUiAction(uiAction, now);
 
     if (uiAction != DiagUiAction::NONE) {
+        diag_ui_requestFullRedraw();
         diag_ui_tick(gLink,
                      gEngine,
                      gStratagemModeRequested,
