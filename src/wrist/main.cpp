@@ -18,7 +18,7 @@ static uint32_t gFireCommandStartedAtMs = 0;
 
 static bool launcherReadyForActivation() {
     return gLink.online &&
-           gLink.armed &&
+           (gLink.armed || gLink.armRequested) &&
            gLink.keySwitchOn &&
            gLink.continuityOk &&
            gLink.lastFaultCode == FaultCode::NONE;
@@ -36,6 +36,7 @@ static bool launcherReadyForFire() {
 
 static void applyLocalDisarmUiState(const char* reason) {
     gLink.armed = false;
+    gLink.armRequested = false;
     gLink.firePermitted = false;
     gLink.remoteState = LauncherSafetyState::DISARMED;
     gLink.lastEvent = LauncherEvent::DISARMED_OK;
@@ -44,6 +45,7 @@ static void applyLocalDisarmUiState(const char* reason) {
 
 static void applyLocalArmUiState(const char* reason) {
     gLink.armed = true;
+    gLink.armRequested = true;
     gLink.remoteState = LauncherSafetyState::ARMED;
     gLink.lastEvent = LauncherEvent::ARMED_OK;
     Serial.printf("[WRIST] Local arm UI state applied: %s\n", reason);

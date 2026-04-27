@@ -41,6 +41,14 @@ static void applyStatusPayload(LauncherLinkState& ls, const StatusPayload& p, ui
     ls.batteryPct     = p.batteryPct;
     ls.linkQuality    = p.linkQuality;
     ls.armed          = (ls.remoteState == LauncherSafetyState::ARMED);
+    if (ls.armed) {
+        ls.armRequested = false;
+    }
+    if (!ls.keySwitchOn ||
+        ls.remoteState == LauncherSafetyState::FAULT ||
+        ls.remoteState == LauncherSafetyState::FIRED) {
+        ls.armRequested = false;
+    }
     ls.online         = true;
 }
 
@@ -105,6 +113,7 @@ void launcher_link_init(LauncherLinkState& state) {
     state.remoteState = LauncherSafetyState::BOOTING;
     state.lastEvent   = LauncherEvent::NONE;
     state.continuityState = ContinuityState::UNKNOWN;
+    state.armRequested = false;
 
     s_link = &state;
 
@@ -158,6 +167,7 @@ void launcher_link_tick(LauncherLinkState& state, uint32_t now) {
     {
         state.online     = false;
         state.armed      = false;
+        state.armRequested = false;
         state.firePermitted = false;
         state.lastEvent  = LauncherEvent::COMMS_LOST;
         Serial.println("[WRIST/link] Launcher OFFLINE — comms timeout");
@@ -165,6 +175,8 @@ void launcher_link_tick(LauncherLinkState& state, uint32_t now) {
 }
 
 void launcher_link_sendArmSet(LauncherLinkState& state, bool arm) {
+    state.armRequested = arm;
+
     ArmSetPacket pkt = {};
     fillHeader(pkt.header, MessageType::ARM_SET,
                sizeof(ArmSetPayload), state.txSeq);

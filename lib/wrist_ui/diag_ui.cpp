@@ -283,7 +283,7 @@ uint16_t launcherStateColor(const LauncherLinkState& link) {
 
 bool launcherReadyForActivation(const LauncherLinkState& link) {
     return link.online &&
-           link.armed &&
+           (link.armed || link.armRequested) &&
            link.keySwitchOn &&
            link.continuityOk &&
            link.lastFaultCode == FaultCode::NONE;
@@ -613,7 +613,7 @@ void drawFireInFlightScreen(const LauncherLinkState& link,
 }
 
 void drawLinkWaitScreen() {
-    drawTitleBar("TACTICAL LINK", "Waiting for launcher heartbeat");
+    drawTitleBar("TACTICAL LINK");
     gDisplay.setTextColor(UI_TEXT, UI_BG);
     gDisplay.setTextDatum(textdatum_t::middle_center);
     gDisplay.drawString("ESTABLISHING TACTICAL LAUNCHER LINK", SCREEN_W / 2, 132);

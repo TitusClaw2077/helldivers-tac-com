@@ -9,6 +9,7 @@ struct LauncherLinkState {
     bool    peerConfigured;
     bool    online;
     bool    armed;
+    bool    armRequested;
     bool    continuityOk;
     ContinuityState continuityState;
     bool    keySwitchOn;
