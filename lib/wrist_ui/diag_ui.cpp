@@ -169,6 +169,7 @@ int gLastActiveStratagemId = -1;
 uint8_t gLastBufferLength = 0;
 bool gLastConfirmVisible = false;
 bool gLastShowHomeDetails = false;
+bool gLastActivationAvailable = false;
 
 const Rect kArmToggleButton  = { 20, 140, 188, 112 };
 const Rect kDetailsButton    = { 20, 262, 188, 46 };
@@ -468,6 +469,16 @@ void drawHomeScreen(const LauncherLinkState& link, const UiViewModel& vm, uint32
                link.armed ? UI_BTN_DISARM : UI_BTN_ARM);
     drawButton(kDetailsButton, "DETAILS", UI_PANEL);
 
+    gLastActivationAvailable = vm.activationAvailable;
+
+    if (vm.activationAvailable) {
+        drawButton(kActivateButton, "ACTIVATE STRATAGEM", UI_BTN_ACTION);
+    } else {
+        drawButton(kActivateButton, "STRATAGEM LOCKED", UI_BTN_DISABLED);
+    }
+}
+
+void drawHomeStratagemButton(const UiViewModel& vm) {
     if (vm.activationAvailable) {
         drawButton(kActivateButton, "ACTIVATE STRATAGEM", UI_BTN_ACTION);
     } else {
@@ -808,6 +819,7 @@ void rememberFrame(const LauncherLinkState& link,
     gLastStratagemModeRequested = stratagemModeRequested;
     gLastFireCommandInFlight = fireCommandInFlight;
     gLastShowHomeDetails = gShowHomeDetails;
+    gLastActivationAvailable = buildViewModel(link, engine, stratagemModeRequested, fireCommandInFlight).activationAvailable;
     gLastActiveStratagemId = engine.active.def ? engine.active.def->id : -1;
     gLastBufferLength = engine.buffer.length;
     gLastConfirmVisible = engine.confirmVisible;
@@ -849,6 +861,8 @@ void diag_ui_tick(const LauncherLinkState& link,
                   bool stratagemModeRequested,
                   bool fireCommandInFlight,
                   uint32_t now) {
+    const UiViewModel vm = buildViewModel(link, engine, stratagemModeRequested, fireCommandInFlight);
+
     serviceTouch(link, engine, stratagemModeRequested, fireCommandInFlight);
 
     if (!gHasLastFrame) {
@@ -868,7 +882,12 @@ void diag_ui_tick(const LauncherLinkState& link,
         drawFrame(link, engine, stratagemModeRequested, fireCommandInFlight, now);
         rememberFrame(link, engine, stratagemModeRequested, fireCommandInFlight);
         gLastDetailsAgeRefreshMs = now;
-    } else if (buildViewModel(link, engine, stratagemModeRequested, fireCommandInFlight).screen == UiScreen::HOME_DETAILS &&
+    } else if (vm.screen == UiScreen::DIAGNOSTICS_HOME && vm.activationAvailable != gLastActivationAvailable) {
+        gDisplay.startWrite();
+        drawHomeStratagemButton(vm);
+        gDisplay.endWrite();
+        gLastActivationAvailable = vm.activationAvailable;
+    } else if (vm.screen == UiScreen::HOME_DETAILS &&
                now - gLastDetailsAgeRefreshMs >= 1000) {
         gDisplay.startWrite();
         drawStatusAgeRow(now, link);
