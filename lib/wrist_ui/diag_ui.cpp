@@ -148,6 +148,7 @@ bool gTouchWasDown = false;
 uint8_t gLauncherMac[6] = {0};
 bool gShowHomeDetails = false;
 uint32_t gLastDetailsAgeRefreshMs = 0;
+uint32_t gLastLauncherStateChangeMs = 0;
 
 UiScreen gLastScreen = UiScreen::LINK_WAIT;
 bool gHasLastFrame = false;
@@ -170,15 +171,15 @@ bool gLastShowHomeDetails = false;
 
 const Rect kArmToggleButton  = { 20, 140, 180, 112 };
 const Rect kDetailsButton    = { 20, 262, 180, 46 };
-const Rect kActivateButton   = { 220, 140, 240, 168 };
+const Rect kActivateButton   = { 220, 140, 248, 168 };
 const Rect kBackButton       = { 20, 262, 140, 42 };
-const Rect kCancelButton     = { 392, 10, 60, 60 };
+const Rect kCancelButton     = { 380, 8, 72, 72 };
 const Rect kConfirmAbortButton = { 20, 256, 180, 48 };
 const Rect kFireButton       = { 220, 248, 240, 56 };
-const Rect kArrowUpButton    = { 176, 154, 128, 58 };
-const Rect kArrowLeftButton  = { 38, 226, 128, 58 };
-const Rect kArrowDownButton  = { 176, 226, 128, 58 };
-const Rect kArrowRightButton = { 314, 226, 128, 58 };
+const Rect kArrowUpButton    = { 172, 162, 136, 64 };
+const Rect kArrowLeftButton  = { 24, 238, 136, 64 };
+const Rect kArrowDownButton  = { 172, 238, 136, 64 };
+const Rect kArrowRightButton = { 320, 238, 136, 64 };
 
 const char* yesNo(bool v) {
     return v ? "YES" : "NO";
@@ -438,7 +439,12 @@ void drawCompactStatusChip(const Rect& r, const char* label, const char* value, 
 void drawStatusAgeRow(uint32_t now, const LauncherLinkState& link) {
     gDisplay.fillRect(244, 176, 196, 24, UI_BG);
     char ageBuf[24];
-    formatStatusAge(link, now, ageBuf, sizeof(ageBuf));
+    if (gLastLauncherStateChangeMs == 0 || gLastLauncherStateChangeMs > now) {
+        snprintf(ageBuf, sizeof(ageBuf), "--");
+    } else {
+        unsigned long ageTenths = (unsigned long)((now - gLastLauncherStateChangeMs) / 100UL);
+        snprintf(ageBuf, sizeof(ageBuf), "%lu.%lus", ageTenths / 10UL, ageTenths % 10UL);
+    }
     drawStatusRow(248, 182, "STATUS AGE", ageBuf);
 }
 
@@ -554,7 +560,7 @@ void drawEntryScreen(const LauncherLinkState& link,
     if (engine.active.def != nullptr) {
         gDisplay.setTextColor(UI_ACCENT, UI_BG);
         gDisplay.setTextDatum(textdatum_t::middle_center);
-        gDisplay.drawString(engine.active.def->name, SCREEN_W / 2, 58);
+        gDisplay.drawString(engine.active.def->name, SCREEN_W / 2, 66);
         gDisplay.setTextDatum(textdatum_t::top_left);
     }
 
@@ -570,17 +576,18 @@ void drawConfirmScreen(const LauncherLinkState& link,
     gDisplay.setTextColor(UI_TEXT, UI_BG);
     gDisplay.setTextDatum(textdatum_t::middle_center);
     if (engine.active.def != nullptr) {
-        gDisplay.drawString(engine.active.def->name, SCREEN_W / 2, 56);
+        gDisplay.drawString(engine.active.def->name, SCREEN_W / 2, 74);
     }
 
+    drawSequenceBoxes(engine);
+
     gDisplay.setTextColor(vm.confirmAvailable ? UI_OK : UI_WARN, UI_BG);
-    gDisplay.drawString(vm.confirmAvailable ? "FIRE WINDOW OPEN" : "LOCKING STRATAGEM", SCREEN_W / 2, 88);
+    gDisplay.drawString(vm.confirmAvailable ? "FIRE WINDOW OPEN" : "LOCKING STRATAGEM", SCREEN_W / 2, 154);
 
     gDisplay.setTextColor(UI_DIM, UI_BG);
-    gDisplay.drawString(stateName(link.remoteState), SCREEN_W / 2, 116);
+    gDisplay.drawString(stateName(link.remoteState), SCREEN_W / 2, 180);
     gDisplay.setTextDatum(textdatum_t::top_left);
 
-    drawSequenceBoxes(engine);
     drawButton(kConfirmAbortButton, "ABORT STRATAGEM", UI_BTN_CANCEL);
     drawButton(kFireButton,
                vm.confirmAvailable ? "FIRE MISSILE" : "FIRE LOCKED",
@@ -714,7 +721,7 @@ void queueActionForTouch(int16_t x,
             break;
 
         case UiScreen::STRATAGEM_CONFIRM:
-            if (kCancelButton.contains(x, y)) {
+            if (kConfirmAbortButton.contains(x, y)) {
                 gPendingAction = DiagUiAction::CANCEL;
             } else if (vm.confirmAvailable && kFireButton.contains(x, y)) {
                 gPendingAction = DiagUiAction::FIRE;
@@ -839,6 +846,19 @@ void diag_ui_tick(const LauncherLinkState& link,
                   bool fireCommandInFlight,
                   uint32_t now) {
     serviceTouch(link, engine, stratagemModeRequested, fireCommandInFlight);
+
+    if (!gHasLastFrame) {
+        gLastLauncherStateChangeMs = now;
+    } else if (link.online != gLastOnline ||
+               link.armed != gLastArmed ||
+               link.keySwitchOn != gLastKey ||
+               link.continuityState != gLastContinuityState ||
+               link.firePermitted != gLastFirePermitted ||
+               link.remoteState != gLastState ||
+               link.lastEvent != gLastEvent ||
+               link.lastFaultCode != gLastFault) {
+        gLastLauncherStateChangeMs = now;
+    }
 
     if (shouldRedraw(link, engine, stratagemModeRequested, fireCommandInFlight)) {
         drawFrame(link, engine, stratagemModeRequested, fireCommandInFlight, now);
