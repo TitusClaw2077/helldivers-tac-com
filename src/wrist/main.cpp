@@ -331,6 +331,14 @@ void loop() {
     DiagUiAction uiAction = diag_ui_takeAction();
     handleUiAction(uiAction, now);
 
+    if (uiAction != DiagUiAction::NONE) {
+        diag_ui_tick(gLink,
+                     gEngine,
+                     gStratagemModeRequested,
+                     gFireCommandInFlight,
+                     now);
+    }
+
     handleSerialConsole();
 
     stratagemEngine_tick(gEngine, now);
