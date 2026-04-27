@@ -154,6 +154,7 @@ UiScreen gLastScreen = UiScreen::LINK_WAIT;
 bool gHasLastFrame = false;
 bool gLastOnline = false;
 bool gLastArmed = false;
+bool gLastArmRequested = false;
 bool gLastKey = false;
 bool gLastContinuityOk = false;
 ContinuityState gLastContinuityState = ContinuityState::UNKNOWN;
@@ -769,6 +770,7 @@ bool shouldRedraw(const LauncherLinkState& link,
     if (vm.screen != gLastScreen) return true;
     if (link.online != gLastOnline) return true;
     if (link.armed != gLastArmed) return true;
+    if (link.armRequested != gLastArmRequested) return true;
     if (link.keySwitchOn != gLastKey) return true;
     if (link.continuityOk != gLastContinuityOk) return true;
     if (link.continuityState != gLastContinuityState) return true;
@@ -794,6 +796,7 @@ void rememberFrame(const LauncherLinkState& link,
     gLastScreen = buildViewModel(link, engine, stratagemModeRequested, fireCommandInFlight).screen;
     gLastOnline = link.online;
     gLastArmed = link.armed;
+    gLastArmRequested = link.armRequested;
     gLastKey = link.keySwitchOn;
     gLastContinuityOk = link.continuityOk;
     gLastContinuityState = link.continuityState;
