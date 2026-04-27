@@ -891,9 +891,9 @@ void diag_ui_tick(const LauncherLinkState& link,
                   bool stratagemModeRequested,
                   bool fireCommandInFlight,
                   uint32_t now) {
-    const UiViewModel vm = buildViewModel(link, engine, stratagemModeRequested, fireCommandInFlight);
-
     serviceTouch(link, engine, stratagemModeRequested, fireCommandInFlight);
+
+    const UiViewModel vm = buildViewModel(link, engine, stratagemModeRequested, fireCommandInFlight);
 
     if (!gHasLastFrame) {
         gLastLauncherStateChangeMs = now;
@@ -909,17 +909,19 @@ void diag_ui_tick(const LauncherLinkState& link,
     }
 
     if (shouldRedraw(link, engine, stratagemModeRequested, fireCommandInFlight)) {
-        if (vm.screen == UiScreen::DIAGNOSTICS_HOME) {
-            logHomeActivationState("full-redraw-home", link, vm);
+        UiViewModel currentVm = buildViewModel(link, engine, stratagemModeRequested, fireCommandInFlight);
+        if (currentVm.screen == UiScreen::DIAGNOSTICS_HOME) {
+            logHomeActivationState("full-redraw-home", link, currentVm);
         }
         drawFrame(link, engine, stratagemModeRequested, fireCommandInFlight, now);
         rememberFrame(link, engine, stratagemModeRequested, fireCommandInFlight);
         gLastDetailsAgeRefreshMs = now;
     } else if (vm.screen == UiScreen::DIAGNOSTICS_HOME &&
                (!gHasDrawnHomeActivationAvailable || vm.activationAvailable != gLastActivationAvailable)) {
-        logHomeActivationState("button-redraw-home", link, vm);
+        UiViewModel currentVm = buildViewModel(link, engine, stratagemModeRequested, fireCommandInFlight);
+        logHomeActivationState("button-redraw-home", link, currentVm);
         gDisplay.startWrite();
-        drawHomeStratagemButton(vm);
+        drawHomeStratagemButton(currentVm);
         gDisplay.endWrite();
     } else if (vm.screen == UiScreen::HOME_DETAILS &&
                now - gLastDetailsAgeRefreshMs >= 1000) {
