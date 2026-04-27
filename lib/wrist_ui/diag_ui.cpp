@@ -172,6 +172,23 @@ bool gLastShowHomeDetails = false;
 bool gLastActivationAvailable = false;
 bool gHasDrawnHomeActivationAvailable = false;
 
+void logHomeActivationState(const char* source,
+                            const LauncherLinkState& link,
+                            const UiViewModel& vm) {
+    Serial.printf("[WRIST/UI][%s] key=%d armed=%d armReq=%d cont=%d fault=%u online=%d activation=%d strat=%d fireFlight=%d screen=%u\n",
+                  source,
+                  link.keySwitchOn,
+                  link.armed,
+                  link.armRequested,
+                  link.continuityOk,
+                  (unsigned)link.lastFaultCode,
+                  link.online,
+                  vm.activationAvailable,
+                  vm.stratagemActive,
+                  gLastFireCommandInFlight,
+                  (unsigned)vm.screen);
+}
+
 const Rect kArmToggleButton  = { 20, 140, 188, 112 };
 const Rect kDetailsButton    = { 20, 262, 188, 46 };
 const Rect kActivateButton   = { 220, 140, 248, 168 };
@@ -476,6 +493,12 @@ void drawHomeScreen(const LauncherLinkState& link, const UiViewModel& vm, uint32
 }
 
 void drawHomeStratagemButton(const UiViewModel& vm) {
+    if (vm.screen == UiScreen::DIAGNOSTICS_HOME) {
+        Serial.printf("[WRIST/UI][draw-home-button] activation=%d label=%s\n",
+                      vm.activationAvailable,
+                      vm.activationAvailable ? "ACTIVATE STRATAGEM" : "STRATAGEM LOCKED");
+    }
+
     if (vm.activationAvailable) {
         drawButton(kActivateButton, "ACTIVATE STRATAGEM", UI_BTN_ACTION);
     } else {
@@ -698,12 +721,19 @@ void queueActionForTouch(int16_t x,
 
     switch (vm.screen) {
         case UiScreen::DIAGNOSTICS_HOME:
+            logHomeActivationState("touch-home", link, vm);
             if (kArmToggleButton.contains(x, y)) {
+                Serial.printf("[WRIST/UI][touch-home] hit=ARM_TOGGLE x=%d y=%d\n", x, y);
                 gPendingAction = link.armed ? DiagUiAction::DISARM : DiagUiAction::ARM;
             } else if (kDetailsButton.contains(x, y)) {
+                Serial.printf("[WRIST/UI][touch-home] hit=DETAILS x=%d y=%d\n", x, y);
                 gShowHomeDetails = true;
             } else if (vm.activationAvailable && kActivateButton.contains(x, y)) {
+                Serial.printf("[WRIST/UI][touch-home] hit=ACTIVATE x=%d y=%d\n", x, y);
                 gPendingAction = DiagUiAction::ACTIVATE;
+            } else if (kActivateButton.contains(x, y)) {
+                Serial.printf("[WRIST/UI][touch-home] hit=LOCKED_BUTTON_REGION x=%d y=%d activation=%d\n",
+                              x, y, vm.activationAvailable);
             }
             break;
 
@@ -879,11 +909,15 @@ void diag_ui_tick(const LauncherLinkState& link,
     }
 
     if (shouldRedraw(link, engine, stratagemModeRequested, fireCommandInFlight)) {
+        if (vm.screen == UiScreen::DIAGNOSTICS_HOME) {
+            logHomeActivationState("full-redraw-home", link, vm);
+        }
         drawFrame(link, engine, stratagemModeRequested, fireCommandInFlight, now);
         rememberFrame(link, engine, stratagemModeRequested, fireCommandInFlight);
         gLastDetailsAgeRefreshMs = now;
     } else if (vm.screen == UiScreen::DIAGNOSTICS_HOME &&
                (!gHasDrawnHomeActivationAvailable || vm.activationAvailable != gLastActivationAvailable)) {
+        logHomeActivationState("button-redraw-home", link, vm);
         gDisplay.startWrite();
         drawHomeStratagemButton(vm);
         gDisplay.endWrite();
