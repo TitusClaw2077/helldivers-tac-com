@@ -1,0 +1,9 @@
+{
+  "name": "wrist_ui",
+  "build": {
+    "srcFilter": [
+      "+<lvgl_ui.cpp>",
+      "-<diag_ui.cpp>"
+    ]
+  }
+}

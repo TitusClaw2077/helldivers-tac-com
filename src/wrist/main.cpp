@@ -4,7 +4,7 @@
 #include "stratagem_engine.h"
 #include "launcher_link.h"
 #include "config_shared.h"
-#include "diag_ui.h"
+#include "lvgl_ui.h"
 
 // ─── Runtime state ────────────────────────────────────────────────────────────
 static StratagemEngineState gEngine;
@@ -196,25 +196,25 @@ static void printMac(const char* label, const uint8_t* mac) {
                   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
-static void handleUiAction(DiagUiAction uiAction, uint32_t now) {
+static void handleUiAction(LvglUiAction uiAction, uint32_t now) {
     switch (uiAction) {
-        case DiagUiAction::NONE:
+        case LvglUiAction::NONE:
             break;
 
-        case DiagUiAction::ARM:
+        case LvglUiAction::ARM:
             Serial.println("[WRIST] UI action: ARM");
             launcher_link_sendArmSet(gLink, true);
             applyLocalArmUiState("ui arm");
             break;
 
-        case DiagUiAction::DISARM:
+        case LvglUiAction::DISARM:
             Serial.println("[WRIST] UI action: DISARM");
             launcher_link_sendArmSet(gLink, false);
             applyLocalDisarmUiState("ui disarm");
             clearStratagemFlow("ui disarm");
             break;
 
-        case DiagUiAction::ACTIVATE:
+        case LvglUiAction::ACTIVATE:
             Serial.println("[WRIST] UI action: ACTIVATE STRATAGEM");
             if (!launcherReadyForActivation()) {
                 Serial.println("[WRIST] Activate blocked, launcher not ready");
@@ -228,34 +228,34 @@ static void handleUiAction(DiagUiAction uiAction, uint32_t now) {
             }
             break;
 
-        case DiagUiAction::CANCEL:
+        case LvglUiAction::CANCEL:
             Serial.println("[WRIST] UI action: CANCEL STRATAGEM");
             launcher_link_sendArmSet(gLink, false);
             applyLocalDisarmUiState("ui cancel");
             clearStratagemFlow("ui cancel");
             break;
 
-        case DiagUiAction::DIR_UP:
+        case LvglUiAction::DIR_UP:
             Serial.println("[WRIST] UI action: UP");
             stratagemEngine_onDirection(gEngine, Direction::UP, now);
             break;
 
-        case DiagUiAction::DIR_DOWN:
+        case LvglUiAction::DIR_DOWN:
             Serial.println("[WRIST] UI action: DOWN");
             stratagemEngine_onDirection(gEngine, Direction::DOWN, now);
             break;
 
-        case DiagUiAction::DIR_LEFT:
+        case LvglUiAction::DIR_LEFT:
             Serial.println("[WRIST] UI action: LEFT");
             stratagemEngine_onDirection(gEngine, Direction::LEFT, now);
             break;
 
-        case DiagUiAction::DIR_RIGHT:
+        case LvglUiAction::DIR_RIGHT:
             Serial.println("[WRIST] UI action: RIGHT");
             stratagemEngine_onDirection(gEngine, Direction::RIGHT, now);
             break;
 
-        case DiagUiAction::FIRE:
+        case LvglUiAction::FIRE:
             Serial.println("[WRIST] UI action: FIRE MISSILE");
             if (gEngine.inputState == StratagemInputState::CONFIRMING) {
                 stratagemEngine_onConfirm(gEngine);
@@ -290,7 +290,7 @@ void setup() {
     }
 
     launcher_link_init(gLink);
-    diag_ui_init(expectedLauncherMac);
+    lvgl_ui_init(expectedLauncherMac);
 
     Serial.println("[WRIST] Ready");
     Serial.println("[WRIST] Serial commands: arm, disarm, fire, status, help");
@@ -322,18 +322,17 @@ void loop() {
         clearStratagemFlow("fire sequence completed");
     }
 
-    diag_ui_tick(gLink,
+    lvgl_ui_tick(gLink,
                  gEngine,
                  gStratagemModeRequested,
                  gFireCommandInFlight,
                  now);
 
-    DiagUiAction uiAction = diag_ui_takeAction();
+    LvglUiAction uiAction = lvgl_ui_takeAction();
     handleUiAction(uiAction, now);
 
-    if (uiAction != DiagUiAction::NONE) {
-        diag_ui_requestFullRedraw();
-        diag_ui_tick(gLink,
+    if (uiAction != LvglUiAction::NONE) {
+        lvgl_ui_tick(gLink,
                      gEngine,
                      gStratagemModeRequested,
                      gFireCommandInFlight,
