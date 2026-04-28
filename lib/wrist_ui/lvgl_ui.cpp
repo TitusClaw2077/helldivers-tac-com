@@ -745,16 +745,16 @@ static void renderModel(const UiRenderModel& model) {
     const bool showConfirm = model.screen == UiScreen::CONFIRM;
     const bool showLaunch = model.screen == UiScreen::FIRING;
     const bool showHero = model.screen == UiScreen::WAITING_FOR_ARM || model.screen == UiScreen::ENTRY || model.screen == UiScreen::CONFIRM;
-    const bool showStatusBar = showHome || showHomeDetails;
+    const bool showStatusBar = showHome;
     const bool showSubtitle = model.screen != UiScreen::LINK_WAIT;
 
     if (showHome || showHomeDetails) {
         lv_obj_set_width(gTitleLabel, 220);
-        lv_obj_set_style_text_align(gTitleLabel, LV_TEXT_ALIGN_RIGHT, 0);
-        lv_obj_set_pos(gTitleLabel, 242, 12);
+        lv_obj_set_style_text_align(gTitleLabel, LV_TEXT_ALIGN_LEFT, 0);
+        lv_obj_set_pos(gTitleLabel, 18, 12);
         lv_obj_set_width(gSubtitleLabel, 220);
-        lv_obj_set_style_text_align(gSubtitleLabel, LV_TEXT_ALIGN_RIGHT, 0);
-        lv_obj_set_pos(gSubtitleLabel, 242, 40);
+        lv_obj_set_style_text_align(gSubtitleLabel, LV_TEXT_ALIGN_LEFT, 0);
+        lv_obj_set_pos(gSubtitleLabel, 18, 40);
     } else {
         lv_obj_set_width(gTitleLabel, SCREEN_W - 36);
         lv_obj_set_style_text_align(gTitleLabel, LV_TEXT_ALIGN_LEFT, 0);
@@ -806,15 +806,16 @@ static void renderModel(const UiRenderModel& model) {
         lv_obj_add_flag(gSequenceExpectedLabel, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(gSequenceEnteredLabel, LV_OBJ_FLAG_HIDDEN);
     } else if (model.screen == UiScreen::HOME_DETAILS) {
-        char details[320];
+        char details[384];
         snprintf(details, sizeof(details),
-                 "ONLINE   %s\nSTATE    %s\nKEY      %s\nCONT     %s\nFAULT    %s\nARMED    %s\nCAN FIRE %s\nLINK Q   %s",
+                 "ONLINE   %s\nSTATE    %s\nKEY      %s\nCONT     %s\nFAULT    %s\nARMED    %s\nEVENT    %u\nCAN FIRE %s\nLINK Q   %s",
                  model.online ? "YES" : "NO",
                  stateName(model.remoteState),
                  model.keySwitchOn ? "ARM" : "SAFE",
                  continuityName(model.continuityState),
                  model.lastFaultCode == FaultCode::NONE ? "NONE" : "FAULT",
                  model.armed ? "YES" : "NO",
+                 (unsigned)model.lastEvent,
                  model.firePermitted ? "YES" : "NO",
                  model.online ? "OK" : "--");
         lv_label_set_text(gDetailsTitleLabel, "SYSTEM DETAILS");
