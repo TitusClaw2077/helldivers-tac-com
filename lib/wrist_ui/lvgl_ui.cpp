@@ -309,7 +309,14 @@ static void touchRead(lv_indev_drv_t*, lv_indev_data_t* data) {
 }
 
 static void appendDirectionString(char* out, size_t outSize, Direction dir) {
-    const char* arrow = directionToArrow(dir);
+    const char* arrow = nullptr;
+    switch (dir) {
+        case Direction::UP:    arrow = "UP"; break;
+        case Direction::DOWN:  arrow = "DOWN"; break;
+        case Direction::LEFT:  arrow = "LEFT"; break;
+        case Direction::RIGHT: arrow = "RIGHT"; break;
+        default:               arrow = "?"; break;
+    }
     if (strlen(out) > 0) {
         strlcat(out, " ", outSize);
     }
@@ -341,32 +348,44 @@ static UiRenderModel buildModel(const LauncherLinkState& link,
 
     if (!link.online) {
         model.screen = UiScreen::LINK_WAIT;
-        strlcpy(model.statusLine, "TACTICAL LINK OFFLINE", sizeof(model.statusLine));
+        strlcpy(model.title, "TACTICAL LINK", sizeof(model.title));
+        strlcpy(model.subtitle, "Waiting for launcher heartbeat", sizeof(model.subtitle));
+        strlcpy(model.statusLine, "LINK OFFLINE", sizeof(model.statusLine));
         strlcpy(model.footerLine, "Waiting for launcher heartbeat", sizeof(model.footerLine));
     } else if (fireCommandInFlight || link.remoteState == LauncherSafetyState::FIRING) {
         model.screen = UiScreen::FIRING;
+        strlcpy(model.title, "FIRE IN FLIGHT", sizeof(model.title));
+        strlcpy(model.subtitle, "Repeat taps locked out", sizeof(model.subtitle));
         strlcpy(model.statusLine, "LAUNCHING", sizeof(model.statusLine));
         strlcpy(model.footerLine, "Command accepted, maintaining lockout", sizeof(model.footerLine));
     } else if (stratagemModeRequested) {
         if (!link.armed) {
             model.screen = UiScreen::WAITING_FOR_ARM;
+            strlcpy(model.title, "ACTIVATING STRATAGEM", sizeof(model.title));
+            strlcpy(model.subtitle, "Waiting for launcher ARM state", sizeof(model.subtitle));
             strlcpy(model.statusLine, "WAITING FOR ARM", sizeof(model.statusLine));
             strlcpy(model.footerLine, "Physical interlock and remote arm required", sizeof(model.footerLine));
         } else if (engine.inputState == StratagemInputState::MATCHED ||
                    engine.inputState == StratagemInputState::CONFIRMING ||
                    engine.inputState == StratagemInputState::FIRING) {
             model.screen = UiScreen::CONFIRM;
+            strlcpy(model.title, "CONFIRM STRATAGEM", sizeof(model.title));
+            strlcpy(model.subtitle, "Launcher ready verification", sizeof(model.subtitle));
             strlcpy(model.statusLine, "STRATAGEM ACCEPTED", sizeof(model.statusLine));
             strlcpy(model.footerLine, model.confirmAvailable ? "Confirm launch when ready" : "Awaiting fire window", sizeof(model.footerLine));
         } else {
             model.screen = UiScreen::ENTRY;
+            strlcpy(model.title, "STRATAGEM ENTRY", sizeof(model.title));
+            strlcpy(model.subtitle, "Directional input", sizeof(model.subtitle));
             strlcpy(model.statusLine, "ENTER STRATAGEM", sizeof(model.statusLine));
             strlcpy(model.footerLine, "Directional input armed", sizeof(model.footerLine));
         }
     } else {
         model.screen = UiScreen::HOME;
+        strlcpy(model.title, "TACTICAL LINK", sizeof(model.title));
+        strlcpy(model.subtitle, "Launcher status and controls", sizeof(model.subtitle));
         strlcpy(model.statusLine, model.activationAvailable ? "READY FOR STRATAGEM" : "SYSTEM CHECK REQUIRED", sizeof(model.statusLine));
-        strlcpy(model.footerLine, "Launcher baseline locked, LVGL shell active", sizeof(model.footerLine));
+        strlcpy(model.footerLine, "Launcher baseline locked", sizeof(model.footerLine));
     }
 
     if (engine.active.def != nullptr) {
@@ -445,17 +464,17 @@ static void initStyles() {
     lv_style_set_text_color(&gStyleTextMuted, c565(COLOR_DIM));
 
     lv_style_init(&gStyleButton);
-    lv_style_set_bg_color(&gStyleButton, c565(COLOR_PANEL_ALT));
-    lv_style_set_border_color(&gStyleButton, c565(COLOR_AMBER_DIM));
+    lv_style_set_bg_color(&gStyleButton, c565(COLOR_PANEL));
+    lv_style_set_border_color(&gStyleButton, c565(COLOR_AMBER));
     lv_style_set_border_width(&gStyleButton, 2);
     lv_style_set_radius(&gStyleButton, 8);
-    lv_style_set_text_color(&gStyleButton, c565(COLOR_TEXT));
+    lv_style_set_text_color(&gStyleButton, c565(COLOR_WHITE));
     lv_style_set_text_font(&gStyleButton, &lv_font_montserrat_18);
     lv_style_set_pad_all(&gStyleButton, 14);
 
     lv_style_init(&gStyleButtonPrimary);
     lv_style_set_bg_color(&gStyleButtonPrimary, c565(COLOR_AMBER));
-    lv_style_set_border_color(&gStyleButtonPrimary, c565(COLOR_WHITE));
+    lv_style_set_border_color(&gStyleButtonPrimary, c565(COLOR_AMBER));
     lv_style_set_border_width(&gStyleButtonPrimary, 2);
     lv_style_set_radius(&gStyleButtonPrimary, 8);
     lv_style_set_text_color(&gStyleButtonPrimary, c565(COLOR_BG1));
@@ -464,7 +483,7 @@ static void initStyles() {
 
     lv_style_init(&gStyleButtonDanger);
     lv_style_set_bg_color(&gStyleButtonDanger, c565(COLOR_RED));
-    lv_style_set_border_color(&gStyleButtonDanger, c565(COLOR_WHITE));
+    lv_style_set_border_color(&gStyleButtonDanger, c565(COLOR_AMBER));
     lv_style_set_border_width(&gStyleButtonDanger, 2);
     lv_style_set_radius(&gStyleButtonDanger, 8);
     lv_style_set_text_color(&gStyleButtonDanger, c565(COLOR_WHITE));
@@ -479,11 +498,11 @@ static void initStyles() {
 
     lv_style_init(&gStyleArrowButton);
     lv_style_set_bg_color(&gStyleArrowButton, c565(COLOR_PANEL_ALT));
-    lv_style_set_border_color(&gStyleArrowButton, c565(COLOR_CYAN));
+    lv_style_set_border_color(&gStyleArrowButton, c565(COLOR_AMBER));
     lv_style_set_border_width(&gStyleArrowButton, 2);
     lv_style_set_radius(&gStyleArrowButton, 8);
-    lv_style_set_text_color(&gStyleArrowButton, c565(COLOR_TEXT));
-    lv_style_set_text_font(&gStyleArrowButton, &lv_font_montserrat_22);
+    lv_style_set_text_color(&gStyleArrowButton, c565(COLOR_WHITE));
+    lv_style_set_text_font(&gStyleArrowButton, &lv_font_montserrat_18);
     lv_style_set_pad_all(&gStyleArrowButton, 14);
 
     lv_style_init(&gStyleLaunchOverlay);
@@ -519,92 +538,93 @@ static void buildUi() {
     gTitleLabel = lv_label_create(gScreen);
     lv_obj_set_style_text_font(gTitleLabel, &lv_font_montserrat_22, 0);
     lv_obj_set_style_text_color(gTitleLabel, c565(COLOR_WHITE), 0);
-    lv_obj_set_pos(gTitleLabel, 18, 58);
+    lv_obj_set_pos(gTitleLabel, 18, 52);
 
     gSubtitleLabel = lv_label_create(gScreen);
     lv_obj_add_style(gSubtitleLabel, &gStyleTextMuted, 0);
     lv_obj_set_style_text_font(gSubtitleLabel, &lv_font_montserrat_14, 0);
-    lv_obj_set_pos(gSubtitleLabel, 18, 88);
+    lv_obj_set_pos(gSubtitleLabel, 18, 80);
 
     gHeroPanel = lv_obj_create(gScreen);
     lv_obj_remove_style_all(gHeroPanel);
     lv_obj_add_style(gHeroPanel, &gStylePanel, 0);
-    lv_obj_set_size(gHeroPanel, SCREEN_W - 36, 148);
-    lv_obj_set_pos(gHeroPanel, 18, 114);
+    lv_obj_set_size(gHeroPanel, SCREEN_W - 36, 96);
+    lv_obj_set_pos(gHeroPanel, 18, 70);
 
     gStatusLabel = lv_label_create(gHeroPanel);
-    lv_obj_set_style_text_font(gStatusLabel, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(gStatusLabel, &lv_font_montserrat_22, 0);
     lv_obj_set_style_text_color(gStatusLabel, c565(COLOR_AMBER), 0);
     lv_obj_set_pos(gStatusLabel, 10, 8);
 
     gActiveNameLabel = lv_label_create(gHeroPanel);
-    lv_obj_set_style_text_font(gActiveNameLabel, &lv_font_montserrat_18, 0);
+    lv_obj_set_style_text_font(gActiveNameLabel, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(gActiveNameLabel, c565(COLOR_WHITE), 0);
-    lv_obj_set_pos(gActiveNameLabel, 10, 52);
+    lv_obj_set_pos(gActiveNameLabel, 10, 38);
 
     gSequenceExpectedLabel = lv_label_create(gHeroPanel);
-    lv_obj_set_style_text_font(gSequenceExpectedLabel, &lv_font_montserrat_16, 0);
-    lv_obj_set_pos(gSequenceExpectedLabel, 10, 86);
+    lv_obj_set_style_text_font(gSequenceExpectedLabel, &lv_font_montserrat_14, 0);
+    lv_obj_set_pos(gSequenceExpectedLabel, 10, 60);
 
     gSequenceEnteredLabel = lv_label_create(gHeroPanel);
-    lv_obj_set_style_text_font(gSequenceEnteredLabel, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(gSequenceEnteredLabel, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(gSequenceEnteredLabel, c565(COLOR_CYAN), 0);
-    lv_obj_set_pos(gSequenceEnteredLabel, 10, 112);
+    lv_obj_set_pos(gSequenceEnteredLabel, 10, 76);
 
     gFooterLabel = lv_label_create(gScreen);
     lv_obj_add_style(gFooterLabel, &gStyleTextMuted, 0);
     lv_obj_set_style_text_font(gFooterLabel, &lv_font_montserrat_14, 0);
     lv_obj_set_width(gFooterLabel, SCREEN_W - 40);
-    lv_obj_set_pos(gFooterLabel, 18, 270);
+    lv_obj_set_pos(gFooterLabel, 18, 292);
+    lv_obj_add_flag(gFooterLabel, LV_OBJ_FLAG_HIDDEN);
 
     gHomeActions = lv_obj_create(gScreen);
     lv_obj_remove_style_all(gHomeActions);
-    lv_obj_set_size(gHomeActions, SCREEN_W - 36, 42);
-    lv_obj_set_pos(gHomeActions, 18, 238);
-    lv_obj_set_flex_flow(gHomeActions, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(gHomeActions, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_size(gHomeActions, SCREEN_W, SCREEN_H);
+    lv_obj_set_pos(gHomeActions, 0, 0);
     lv_obj_set_style_bg_opa(gHomeActions, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(gHomeActions, 0, 0);
 
-    gArmButton = createActionButton(gHomeActions, "ARM / DISARM", &gStyleButton, LvglUiAction::ARM, 180, 42);
-    gActivateButton = createActionButton(gHomeActions, "ACTIVATE STRATAGEM", &gStyleButtonPrimary, LvglUiAction::ACTIVATE, 250, 42);
+    gArmButton = createActionButton(gHomeActions, "ARM LAUNCHER", &gStyleButton, LvglUiAction::ARM, 188, 112);
+    lv_obj_set_pos(gArmButton, 20, 140);
+    gActivateButton = createActionButton(gHomeActions, "ACTIVATE STRATAGEM", &gStyleButtonPrimary, LvglUiAction::ACTIVATE, 248, 168);
+    lv_obj_set_pos(gActivateButton, 220, 140);
     lv_obj_add_style(gActivateButton, &gStyleButtonDisabled, LV_STATE_DISABLED);
 
     gEntryPad = lv_obj_create(gScreen);
     lv_obj_remove_style_all(gEntryPad);
-    lv_obj_set_size(gEntryPad, SCREEN_W - 36, 120);
-    lv_obj_set_pos(gEntryPad, 18, 190);
+    lv_obj_set_size(gEntryPad, SCREEN_W, SCREEN_H);
+    lv_obj_set_pos(gEntryPad, 0, 0);
     lv_obj_set_style_bg_opa(gEntryPad, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(gEntryPad, 0, 0);
     lv_obj_add_flag(gEntryPad, LV_OBJ_FLAG_HIDDEN);
 
-    gArrowUpButton = createActionButton(gEntryPad, LV_SYMBOL_UP, &gStyleArrowButton, LvglUiAction::DIR_UP, 104, 46);
-    lv_obj_set_pos(gArrowUpButton, 188, 0);
+    gArrowUpButton = createActionButton(gEntryPad, "UP", &gStyleArrowButton, LvglUiAction::DIR_UP, 136, 64);
+    lv_obj_set_pos(gArrowUpButton, 172, 162);
     lv_obj_add_style(gArrowUpButton, &gStyleButtonDisabled, LV_STATE_DISABLED);
-    gArrowLeftButton = createActionButton(gEntryPad, LV_SYMBOL_LEFT, &gStyleArrowButton, LvglUiAction::DIR_LEFT, 104, 46);
-    lv_obj_set_pos(gArrowLeftButton, 70, 54);
+    gArrowLeftButton = createActionButton(gEntryPad, "LEFT", &gStyleArrowButton, LvglUiAction::DIR_LEFT, 136, 64);
+    lv_obj_set_pos(gArrowLeftButton, 24, 238);
     lv_obj_add_style(gArrowLeftButton, &gStyleButtonDisabled, LV_STATE_DISABLED);
-    gArrowDownButton = createActionButton(gEntryPad, LV_SYMBOL_DOWN, &gStyleArrowButton, LvglUiAction::DIR_DOWN, 104, 46);
-    lv_obj_set_pos(gArrowDownButton, 188, 54);
+    gArrowDownButton = createActionButton(gEntryPad, "DOWN", &gStyleArrowButton, LvglUiAction::DIR_DOWN, 136, 64);
+    lv_obj_set_pos(gArrowDownButton, 172, 238);
     lv_obj_add_style(gArrowDownButton, &gStyleButtonDisabled, LV_STATE_DISABLED);
-    gArrowRightButton = createActionButton(gEntryPad, LV_SYMBOL_RIGHT, &gStyleArrowButton, LvglUiAction::DIR_RIGHT, 104, 46);
-    lv_obj_set_pos(gArrowRightButton, 306, 54);
+    gArrowRightButton = createActionButton(gEntryPad, "RIGHT", &gStyleArrowButton, LvglUiAction::DIR_RIGHT, 136, 64);
+    lv_obj_set_pos(gArrowRightButton, 320, 238);
     lv_obj_add_style(gArrowRightButton, &gStyleButtonDisabled, LV_STATE_DISABLED);
-    gCancelButton = createActionButton(gEntryPad, "CANCEL", &gStyleButtonDanger, LvglUiAction::CANCEL, 104, 46);
-    lv_obj_set_pos(gCancelButton, 0, 54);
+    gCancelButton = createActionButton(gEntryPad, "X", &gStyleButtonDanger, LvglUiAction::CANCEL, 72, 72);
+    lv_obj_set_pos(gCancelButton, 380, 8);
 
     gConfirmActions = lv_obj_create(gScreen);
     lv_obj_remove_style_all(gConfirmActions);
-    lv_obj_set_size(gConfirmActions, SCREEN_W - 36, 54);
-    lv_obj_set_pos(gConfirmActions, 18, 246);
+    lv_obj_set_size(gConfirmActions, SCREEN_W, SCREEN_H);
+    lv_obj_set_pos(gConfirmActions, 0, 0);
     lv_obj_set_style_bg_opa(gConfirmActions, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(gConfirmActions, 0, 0);
     lv_obj_add_flag(gConfirmActions, LV_OBJ_FLAG_HIDDEN);
 
-    lv_obj_t* abort = createActionButton(gConfirmActions, "ABORT", &gStyleButtonDanger, LvglUiAction::CANCEL, 180, 52);
-    lv_obj_set_pos(abort, 0, 0);
-    gFireButton = createActionButton(gConfirmActions, "FIRE", &gStyleButtonPrimary, LvglUiAction::FIRE, 250, 52);
-    lv_obj_set_pos(gFireButton, 194, 0);
+    lv_obj_t* abort = createActionButton(gConfirmActions, "ABORT STRATAGEM", &gStyleButtonDanger, LvglUiAction::CANCEL, 188, 56);
+    lv_obj_set_pos(abort, 20, 248);
+    gFireButton = createActionButton(gConfirmActions, "FIRE MISSILE", &gStyleButtonPrimary, LvglUiAction::FIRE, 240, 56);
+    lv_obj_set_pos(gFireButton, 220, 248);
     lv_obj_add_style(gFireButton, &gStyleButtonDisabled, LV_STATE_DISABLED);
 
     gLaunchOverlay = lv_obj_create(gScreen);
@@ -664,11 +684,20 @@ static void renderModel(const UiRenderModel& model) {
     const bool showEntry = model.screen == UiScreen::ENTRY || model.screen == UiScreen::WAITING_FOR_ARM;
     const bool showConfirm = model.screen == UiScreen::CONFIRM;
     const bool showLaunch = model.screen == UiScreen::FIRING;
+    const bool showHero = !showHome;
+    const bool showStatusBar = showHome;
+    const bool showSubtitle = true;
+
+    lv_obj_set_pos(gTitleLabel, 18, showStatusBar ? 52 : 12);
+    lv_obj_set_pos(gSubtitleLabel, 18, showStatusBar ? 80 : 40);
 
     if (showHome) lv_obj_clear_flag(gHomeActions, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gHomeActions, LV_OBJ_FLAG_HIDDEN);
     if (showEntry) lv_obj_clear_flag(gEntryPad, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gEntryPad, LV_OBJ_FLAG_HIDDEN);
     if (showConfirm) lv_obj_clear_flag(gConfirmActions, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gConfirmActions, LV_OBJ_FLAG_HIDDEN);
     if (showLaunch) lv_obj_clear_flag(gLaunchOverlay, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gLaunchOverlay, LV_OBJ_FLAG_HIDDEN);
+    if (showHero) lv_obj_clear_flag(gHeroPanel, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gHeroPanel, LV_OBJ_FLAG_HIDDEN);
+    if (showStatusBar) lv_obj_clear_flag(gStatusBar, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gStatusBar, LV_OBJ_FLAG_HIDDEN);
+    if (showSubtitle) lv_obj_clear_flag(gSubtitleLabel, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gSubtitleLabel, LV_OBJ_FLAG_HIDDEN);
 
     if (model.screen == UiScreen::LINK_WAIT) {
         lv_label_set_text(gActiveNameLabel, "SYSTEM  LINK SEARCH");
@@ -678,6 +707,8 @@ static void renderModel(const UiRenderModel& model) {
         lv_label_set_text(gActiveNameLabel, "STRATAGEM  STANDBY");
         lv_label_set_text(gSequenceEnteredLabel, "ENTERED   INPUT LOCKED UNTIL ARM");
     }
+
+    lv_label_set_text(lv_obj_get_child(gArmButton, 0), model.armed ? "DISARM LAUNCHER" : "ARM LAUNCHER");
 }
 } // namespace
 
