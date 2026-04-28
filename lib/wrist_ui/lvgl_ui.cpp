@@ -4,7 +4,7 @@
 #include <SPI.h>
 #include <LovyanGFX.hpp>
 #include <XPT2046_Touchscreen.h>
-#include <lvgl.h>
+#include <src/lvgl.h>
 
 #include <string.h>
 
