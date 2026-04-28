@@ -377,8 +377,8 @@ static UiRenderModel buildModel(const LauncherLinkState& link,
         } else {
             model.screen = UiScreen::ENTRY;
             strlcpy(model.title, "STRATAGEM ENTRY", sizeof(model.title));
-            strlcpy(model.subtitle, "Directional input", sizeof(model.subtitle));
-            strlcpy(model.statusLine, "ENTER STRATAGEM", sizeof(model.statusLine));
+            strlcpy(model.subtitle, "", sizeof(model.subtitle));
+            strlcpy(model.statusLine, "", sizeof(model.statusLine));
             strlcpy(model.footerLine, "Directional input armed", sizeof(model.footerLine));
         }
     } else {
@@ -395,6 +395,10 @@ static UiRenderModel buildModel(const LauncherLinkState& link,
         model.expectedSequence[0] = '\0';
         for (uint8_t i = 0; i < engine.active.def->length; ++i) {
             appendDirectionString(model.expectedSequence, sizeof(model.expectedSequence), engine.active.def->sequence[i]);
+        }
+
+        if (model.screen == UiScreen::ENTRY) {
+            strlcpy(model.subtitle, engine.active.def->name, sizeof(model.subtitle));
         }
     }
 
@@ -524,10 +528,8 @@ static void buildUi() {
 
     gStatusBar = lv_obj_create(gScreen);
     lv_obj_remove_style_all(gStatusBar);
-    lv_obj_set_size(gStatusBar, SCREEN_W - 24, 36);
-    lv_obj_set_pos(gStatusBar, 12, 10);
-    lv_obj_set_flex_flow(gStatusBar, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(gStatusBar, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_size(gStatusBar, SCREEN_W - 40, 36);
+    lv_obj_set_pos(gStatusBar, 20, 96);
     lv_obj_set_style_bg_opa(gStatusBar, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(gStatusBar, 0, 0);
     lv_obj_set_style_pad_gap(gStatusBar, 8, 0);
@@ -536,22 +538,38 @@ static void buildUi() {
     gBadgeInterlock = createBadge(gStatusBar, "INTLK", COLOR_PANEL_ALT);
     gBadgeContinuity = createBadge(gStatusBar, "CONT", COLOR_PANEL_ALT);
     gBadgeState = createBadge(gStatusBar, "STATE", COLOR_PANEL_ALT);
+    lv_obj_set_size(gBadgeLink, 104, 36);
+    lv_obj_set_size(gBadgeInterlock, 104, 36);
+    lv_obj_set_size(gBadgeContinuity, 104, 36);
+    lv_obj_set_size(gBadgeState, 104, 36);
+    lv_obj_set_pos(gBadgeLink, 0, 0);
+    lv_obj_set_pos(gBadgeInterlock, 112, 0);
+    lv_obj_set_pos(gBadgeContinuity, 224, 0);
+    lv_obj_set_pos(gBadgeState, 336, 0);
+    lv_obj_set_style_text_align(gBadgeLink, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_align(gBadgeInterlock, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_align(gBadgeContinuity, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_align(gBadgeState, LV_TEXT_ALIGN_CENTER, 0);
 
     gTitleLabel = lv_label_create(gScreen);
     lv_obj_set_style_text_font(gTitleLabel, &lv_font_montserrat_22, 0);
     lv_obj_set_style_text_color(gTitleLabel, c565(COLOR_TEXT), 0);
-    lv_obj_set_pos(gTitleLabel, 18, 52);
+    lv_obj_set_width(gTitleLabel, 220);
+    lv_obj_set_style_text_align(gTitleLabel, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_pos(gTitleLabel, 242, 12);
 
     gSubtitleLabel = lv_label_create(gScreen);
     lv_obj_add_style(gSubtitleLabel, &gStyleTextMuted, 0);
     lv_obj_set_style_text_font(gSubtitleLabel, &lv_font_montserrat_14, 0);
-    lv_obj_set_pos(gSubtitleLabel, 18, 80);
+    lv_obj_set_width(gSubtitleLabel, 220);
+    lv_obj_set_style_text_align(gSubtitleLabel, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_pos(gSubtitleLabel, 242, 40);
 
     gHeroPanel = lv_obj_create(gScreen);
     lv_obj_remove_style_all(gHeroPanel);
     lv_obj_add_style(gHeroPanel, &gStylePanel, 0);
-    lv_obj_set_size(gHeroPanel, SCREEN_W - 36, 96);
-    lv_obj_set_pos(gHeroPanel, 18, 70);
+    lv_obj_set_size(gHeroPanel, SCREEN_W - 36, 88);
+    lv_obj_set_pos(gHeroPanel, 18, 82);
 
     gStatusLabel = lv_label_create(gHeroPanel);
     lv_obj_set_style_text_font(gStatusLabel, &lv_font_montserrat_22, 0);
@@ -565,12 +583,12 @@ static void buildUi() {
 
     gSequenceExpectedLabel = lv_label_create(gHeroPanel);
     lv_obj_set_style_text_font(gSequenceExpectedLabel, &lv_font_montserrat_14, 0);
-    lv_obj_set_pos(gSequenceExpectedLabel, 10, 60);
+    lv_obj_set_pos(gSequenceExpectedLabel, 10, 22);
 
     gSequenceEnteredLabel = lv_label_create(gHeroPanel);
     lv_obj_set_style_text_font(gSequenceEnteredLabel, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(gSequenceEnteredLabel, c565(COLOR_CYAN), 0);
-    lv_obj_set_pos(gSequenceEnteredLabel, 10, 76);
+    lv_obj_set_pos(gSequenceEnteredLabel, 10, 46);
 
     gFooterLabel = lv_label_create(gScreen);
     lv_obj_add_style(gFooterLabel, &gStyleTextMuted, 0);
@@ -690,12 +708,25 @@ static void renderModel(const UiRenderModel& model) {
     const bool showEntry = model.screen == UiScreen::ENTRY || model.screen == UiScreen::WAITING_FOR_ARM;
     const bool showConfirm = model.screen == UiScreen::CONFIRM;
     const bool showLaunch = model.screen == UiScreen::FIRING;
-    const bool showHero = !showHome;
+    const bool showHero = model.screen == UiScreen::WAITING_FOR_ARM || model.screen == UiScreen::ENTRY || model.screen == UiScreen::CONFIRM;
     const bool showStatusBar = showHome;
-    const bool showSubtitle = true;
+    const bool showSubtitle = model.screen != UiScreen::LINK_WAIT;
 
-    lv_obj_set_pos(gTitleLabel, 18, showStatusBar ? 52 : 12);
-    lv_obj_set_pos(gSubtitleLabel, 18, showStatusBar ? 80 : 40);
+    if (showHome) {
+        lv_obj_set_width(gTitleLabel, 220);
+        lv_obj_set_style_text_align(gTitleLabel, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_set_pos(gTitleLabel, 242, 12);
+        lv_obj_set_width(gSubtitleLabel, 220);
+        lv_obj_set_style_text_align(gSubtitleLabel, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_set_pos(gSubtitleLabel, 242, 40);
+    } else {
+        lv_obj_set_width(gTitleLabel, SCREEN_W - 36);
+        lv_obj_set_style_text_align(gTitleLabel, LV_TEXT_ALIGN_LEFT, 0);
+        lv_obj_set_pos(gTitleLabel, 18, 12);
+        lv_obj_set_width(gSubtitleLabel, SCREEN_W - 36);
+        lv_obj_set_style_text_align(gSubtitleLabel, LV_TEXT_ALIGN_LEFT, 0);
+        lv_obj_set_pos(gSubtitleLabel, 18, 40);
+    }
 
     if (showHome) lv_obj_clear_flag(gHomeActions, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gHomeActions, LV_OBJ_FLAG_HIDDEN);
     if (showEntry) lv_obj_clear_flag(gEntryPad, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gEntryPad, LV_OBJ_FLAG_HIDDEN);
@@ -704,6 +735,39 @@ static void renderModel(const UiRenderModel& model) {
     if (showHero) lv_obj_clear_flag(gHeroPanel, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gHeroPanel, LV_OBJ_FLAG_HIDDEN);
     if (showStatusBar) lv_obj_clear_flag(gStatusBar, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gStatusBar, LV_OBJ_FLAG_HIDDEN);
     if (showSubtitle) lv_obj_clear_flag(gSubtitleLabel, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gSubtitleLabel, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_add_flag(gStatusLabel, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(gActiveNameLabel, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(gSequenceExpectedLabel, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(gSequenceEnteredLabel, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_size(gHeroPanel, SCREEN_W - 36, 88);
+    lv_obj_set_pos(gHeroPanel, 18, 82);
+
+    if (model.screen == UiScreen::WAITING_FOR_ARM) {
+        lv_obj_clear_flag(gStatusLabel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_width(gStatusLabel, SCREEN_W - 60);
+        lv_obj_set_style_text_align(gStatusLabel, LV_TEXT_ALIGN_LEFT, 0);
+        lv_obj_set_pos(gStatusLabel, 10, 8);
+        lv_obj_set_pos(gActiveNameLabel, 10, 38);
+        lv_obj_set_pos(gSequenceExpectedLabel, 10, 60);
+        lv_obj_set_pos(gSequenceEnteredLabel, 10, 76);
+    } else if (model.screen == UiScreen::ENTRY) {
+        lv_obj_add_flag(gStatusLabel, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(gActiveNameLabel, "");
+        lv_obj_set_pos(gSequenceExpectedLabel, 10, 22);
+        lv_obj_set_pos(gSequenceEnteredLabel, 10, 46);
+    } else if (model.screen == UiScreen::CONFIRM) {
+        lv_obj_clear_flag(gStatusLabel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_size(gHeroPanel, SCREEN_W - 36, 72);
+        lv_obj_set_pos(gHeroPanel, 18, 96);
+        lv_label_set_text(gStatusLabel, "STRATAGEM ACCEPTED");
+        lv_obj_set_width(gStatusLabel, SCREEN_W - 60);
+        lv_obj_set_style_text_align(gStatusLabel, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_pos(gStatusLabel, 10, 22);
+        lv_obj_add_flag(gActiveNameLabel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(gSequenceExpectedLabel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(gSequenceEnteredLabel, LV_OBJ_FLAG_HIDDEN);
+    }
 
     if (model.screen == UiScreen::LINK_WAIT) {
         lv_label_set_text(gActiveNameLabel, "SYSTEM  LINK SEARCH");
