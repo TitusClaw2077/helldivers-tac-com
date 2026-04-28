@@ -39,12 +39,12 @@ constexpr int TOUCH_MAX_Z     = 4000;
 
 constexpr lv_coord_t DRAW_BUFFER_LINES = 20;
 
-constexpr uint16_t COLOR_BG0        = 0x10A2;
-constexpr uint16_t COLOR_BG1        = 0x0000;
-constexpr uint16_t COLOR_PANEL      = 0x18C3;
-constexpr uint16_t COLOR_PANEL_ALT  = 0x2124;
-constexpr uint16_t COLOR_TEXT       = 0xFF9B;
-constexpr uint16_t COLOR_DIM        = 0x8C71;
+constexpr uint16_t COLOR_BG0        = 0xFFFF;
+constexpr uint16_t COLOR_BG1        = 0xFFFF;
+constexpr uint16_t COLOR_PANEL      = 0xEF5D;
+constexpr uint16_t COLOR_PANEL_ALT  = 0xD69A;
+constexpr uint16_t COLOR_TEXT       = 0x0000;
+constexpr uint16_t COLOR_DIM        = 0x4208;
 constexpr uint16_t COLOR_AMBER      = 0xFD20;
 constexpr uint16_t COLOR_AMBER_DIM  = 0xB400;
 constexpr uint16_t COLOR_GREEN      = 0x45C8;
@@ -176,6 +176,7 @@ lv_obj_t* gConfirmActions = nullptr;
 lv_obj_t* gLaunchOverlay = nullptr;
 lv_obj_t* gArmButton = nullptr;
 lv_obj_t* gActivateButton = nullptr;
+lv_obj_t* gDetailsButton = nullptr;
 lv_obj_t* gCancelButton = nullptr;
 lv_obj_t* gFireButton = nullptr;
 lv_obj_t* gArrowUpButton = nullptr;
@@ -447,7 +448,7 @@ static void initStyles() {
 
     lv_style_init(&gStylePanel);
     lv_style_set_bg_color(&gStylePanel, c565(COLOR_PANEL));
-    lv_style_set_border_color(&gStylePanel, c565(COLOR_AMBER_DIM));
+    lv_style_set_border_color(&gStylePanel, c565(COLOR_TEXT));
     lv_style_set_border_width(&gStylePanel, 2);
     lv_style_set_radius(&gStylePanel, 8);
     lv_style_set_pad_all(&gStylePanel, 12);
@@ -459,49 +460,50 @@ static void initStyles() {
     lv_style_set_radius(&gStyleBadge, 6);
     lv_style_set_border_width(&gStyleBadge, 1);
     lv_style_set_text_font(&gStyleBadge, &lv_font_montserrat_14);
+    lv_style_set_text_color(&gStyleBadge, c565(COLOR_TEXT));
 
     lv_style_init(&gStyleTextMuted);
     lv_style_set_text_color(&gStyleTextMuted, c565(COLOR_DIM));
 
     lv_style_init(&gStyleButton);
     lv_style_set_bg_color(&gStyleButton, c565(COLOR_PANEL));
-    lv_style_set_border_color(&gStyleButton, c565(COLOR_AMBER));
+    lv_style_set_border_color(&gStyleButton, c565(COLOR_TEXT));
     lv_style_set_border_width(&gStyleButton, 2);
     lv_style_set_radius(&gStyleButton, 8);
-    lv_style_set_text_color(&gStyleButton, c565(COLOR_WHITE));
+    lv_style_set_text_color(&gStyleButton, c565(COLOR_TEXT));
     lv_style_set_text_font(&gStyleButton, &lv_font_montserrat_18);
     lv_style_set_pad_all(&gStyleButton, 14);
 
     lv_style_init(&gStyleButtonPrimary);
     lv_style_set_bg_color(&gStyleButtonPrimary, c565(COLOR_AMBER));
-    lv_style_set_border_color(&gStyleButtonPrimary, c565(COLOR_AMBER));
+    lv_style_set_border_color(&gStyleButtonPrimary, c565(COLOR_TEXT));
     lv_style_set_border_width(&gStyleButtonPrimary, 2);
     lv_style_set_radius(&gStyleButtonPrimary, 8);
-    lv_style_set_text_color(&gStyleButtonPrimary, c565(COLOR_BG1));
+    lv_style_set_text_color(&gStyleButtonPrimary, c565(COLOR_TEXT));
     lv_style_set_text_font(&gStyleButtonPrimary, &lv_font_montserrat_18);
     lv_style_set_pad_all(&gStyleButtonPrimary, 14);
 
     lv_style_init(&gStyleButtonDanger);
     lv_style_set_bg_color(&gStyleButtonDanger, c565(COLOR_RED));
-    lv_style_set_border_color(&gStyleButtonDanger, c565(COLOR_AMBER));
+    lv_style_set_border_color(&gStyleButtonDanger, c565(COLOR_TEXT));
     lv_style_set_border_width(&gStyleButtonDanger, 2);
     lv_style_set_radius(&gStyleButtonDanger, 8);
-    lv_style_set_text_color(&gStyleButtonDanger, c565(COLOR_WHITE));
+    lv_style_set_text_color(&gStyleButtonDanger, c565(COLOR_TEXT));
     lv_style_set_text_font(&gStyleButtonDanger, &lv_font_montserrat_18);
     lv_style_set_pad_all(&gStyleButtonDanger, 14);
 
     lv_style_init(&gStyleButtonDisabled);
     lv_style_set_bg_color(&gStyleButtonDisabled, c565(COLOR_PANEL_ALT));
-    lv_style_set_border_color(&gStyleButtonDisabled, c565(COLOR_DIM));
+    lv_style_set_border_color(&gStyleButtonDisabled, c565(COLOR_TEXT));
     lv_style_set_border_width(&gStyleButtonDisabled, 2);
     lv_style_set_text_color(&gStyleButtonDisabled, c565(COLOR_DIM));
 
     lv_style_init(&gStyleArrowButton);
     lv_style_set_bg_color(&gStyleArrowButton, c565(COLOR_PANEL_ALT));
-    lv_style_set_border_color(&gStyleArrowButton, c565(COLOR_AMBER));
+    lv_style_set_border_color(&gStyleArrowButton, c565(COLOR_TEXT));
     lv_style_set_border_width(&gStyleArrowButton, 2);
     lv_style_set_radius(&gStyleArrowButton, 8);
-    lv_style_set_text_color(&gStyleArrowButton, c565(COLOR_WHITE));
+    lv_style_set_text_color(&gStyleArrowButton, c565(COLOR_TEXT));
     lv_style_set_text_font(&gStyleArrowButton, &lv_font_montserrat_18);
     lv_style_set_pad_all(&gStyleArrowButton, 14);
 
@@ -537,7 +539,7 @@ static void buildUi() {
 
     gTitleLabel = lv_label_create(gScreen);
     lv_obj_set_style_text_font(gTitleLabel, &lv_font_montserrat_22, 0);
-    lv_obj_set_style_text_color(gTitleLabel, c565(COLOR_WHITE), 0);
+    lv_obj_set_style_text_color(gTitleLabel, c565(COLOR_TEXT), 0);
     lv_obj_set_pos(gTitleLabel, 18, 52);
 
     gSubtitleLabel = lv_label_create(gScreen);
@@ -558,7 +560,7 @@ static void buildUi() {
 
     gActiveNameLabel = lv_label_create(gHeroPanel);
     lv_obj_set_style_text_font(gActiveNameLabel, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(gActiveNameLabel, c565(COLOR_WHITE), 0);
+    lv_obj_set_style_text_color(gActiveNameLabel, c565(COLOR_TEXT), 0);
     lv_obj_set_pos(gActiveNameLabel, 10, 38);
 
     gSequenceExpectedLabel = lv_label_create(gHeroPanel);
@@ -588,6 +590,9 @@ static void buildUi() {
     lv_obj_set_pos(gArmButton, 20, 140);
     gActivateButton = createActionButton(gHomeActions, "ACTIVATE STRATAGEM", &gStyleButtonPrimary, LvglUiAction::ACTIVATE, 248, 168);
     lv_obj_set_pos(gActivateButton, 220, 140);
+    gDetailsButton = createActionButton(gHomeActions, "DETAILS", &gStyleButton, LvglUiAction::NONE, 188, 46);
+    lv_obj_set_pos(gDetailsButton, 20, 262);
+    lv_obj_clear_flag(gDetailsButton, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_style(gActivateButton, &gStyleButtonDisabled, LV_STATE_DISABLED);
 
     gEntryPad = lv_obj_create(gScreen);
@@ -636,6 +641,7 @@ static void buildUi() {
     lv_obj_t* launchLabel = lv_label_create(gLaunchOverlay);
     lv_label_set_text(launchLabel, "MISSILE AWAY");
     lv_obj_set_style_text_font(launchLabel, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_color(launchLabel, c565(COLOR_TEXT), 0);
     lv_obj_center(launchLabel);
 
     lv_scr_load(gScreen);
