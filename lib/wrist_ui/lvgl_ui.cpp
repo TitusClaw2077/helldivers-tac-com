@@ -113,6 +113,7 @@ private:
 enum class UiScreen : uint8_t {
     LINK_WAIT = 0,
     HOME,
+    HOME_DETAILS,
     WAITING_FOR_ARM,
     ENTRY,
     CONFIRM,
@@ -177,6 +178,10 @@ lv_obj_t* gLaunchOverlay = nullptr;
 lv_obj_t* gArmButton = nullptr;
 lv_obj_t* gActivateButton = nullptr;
 lv_obj_t* gDetailsButton = nullptr;
+lv_obj_t* gDetailsPanel = nullptr;
+lv_obj_t* gDetailsTitleLabel = nullptr;
+lv_obj_t* gDetailsBodyLabel = nullptr;
+lv_obj_t* gBackButton = nullptr;
 lv_obj_t* gCancelButton = nullptr;
 lv_obj_t* gFireButton = nullptr;
 lv_obj_t* gArrowUpButton = nullptr;
@@ -198,6 +203,7 @@ lv_style_t gStyleLaunchOverlay;
 uint32_t gLastLvTickMs = 0;
 LvglUiAction gPendingAction = LvglUiAction::NONE;
 UiRenderModel gLastModel = {};
+bool gShowHomeDetails = false;
 
 static const char* stateName(LauncherSafetyState state) {
     switch (state) {
@@ -277,7 +283,13 @@ static void setButtonEnabled(lv_obj_t* button, bool enabled) {
 static void actionButtonEvent(lv_event_t* e) {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
     auto action = static_cast<LvglUiAction>(reinterpret_cast<uintptr_t>(lv_event_get_user_data(e)));
-    if (action == LvglUiAction::ARM) {
+    if (action == LvglUiAction::DETAILS) {
+        gShowHomeDetails = true;
+        return;
+    } else if (action == LvglUiAction::BACK) {
+        gShowHomeDetails = false;
+        return;
+    } else if (action == LvglUiAction::ARM) {
         setPendingAction(gLastModel.armed ? LvglUiAction::DISARM : LvglUiAction::ARM);
     } else {
         setPendingAction(action);
@@ -382,7 +394,7 @@ static UiRenderModel buildModel(const LauncherLinkState& link,
             strlcpy(model.footerLine, "Directional input armed", sizeof(model.footerLine));
         }
     } else {
-        model.screen = UiScreen::HOME;
+        model.screen = gShowHomeDetails ? UiScreen::HOME_DETAILS : UiScreen::HOME;
         strlcpy(model.title, "TACTICAL LINK", sizeof(model.title));
         strlcpy(model.subtitle, "Launcher status and controls", sizeof(model.subtitle));
         strlcpy(model.statusLine, model.activationAvailable ? "READY FOR STRATAGEM" : "SYSTEM CHECK REQUIRED", sizeof(model.statusLine));
@@ -610,8 +622,31 @@ static void buildUi() {
     lv_obj_set_pos(gActivateButton, 220, 140);
     gDetailsButton = createActionButton(gHomeActions, "DETAILS", &gStyleButton, LvglUiAction::NONE, 188, 46);
     lv_obj_set_pos(gDetailsButton, 20, 262);
-    lv_obj_clear_flag(gDetailsButton, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(gDetailsButton, actionButtonEvent, LV_EVENT_CLICKED,
+                        reinterpret_cast<void*>(static_cast<uintptr_t>(LvglUiAction::DETAILS)));
     lv_obj_add_style(gActivateButton, &gStyleButtonDisabled, LV_STATE_DISABLED);
+
+    gDetailsPanel = lv_obj_create(gScreen);
+    lv_obj_remove_style_all(gDetailsPanel);
+    lv_obj_add_style(gDetailsPanel, &gStylePanel, 0);
+    lv_obj_set_size(gDetailsPanel, SCREEN_W - 36, 178);
+    lv_obj_set_pos(gDetailsPanel, 18, 70);
+    lv_obj_add_flag(gDetailsPanel, LV_OBJ_FLAG_HIDDEN);
+
+    gDetailsTitleLabel = lv_label_create(gDetailsPanel);
+    lv_obj_set_style_text_font(gDetailsTitleLabel, &lv_font_montserrat_18, 0);
+    lv_obj_set_style_text_color(gDetailsTitleLabel, c565(COLOR_TEXT), 0);
+    lv_obj_set_pos(gDetailsTitleLabel, 10, 8);
+
+    gDetailsBodyLabel = lv_label_create(gDetailsPanel);
+    lv_obj_set_style_text_font(gDetailsBodyLabel, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(gDetailsBodyLabel, c565(COLOR_TEXT), 0);
+    lv_obj_set_width(gDetailsBodyLabel, SCREEN_W - 64);
+    lv_obj_set_pos(gDetailsBodyLabel, 10, 40);
+
+    gBackButton = createActionButton(gScreen, "BACK", &gStyleButton, LvglUiAction::BACK, 140, 42);
+    lv_obj_set_pos(gBackButton, 20, 262);
+    lv_obj_add_flag(gBackButton, LV_OBJ_FLAG_HIDDEN);
 
     gEntryPad = lv_obj_create(gScreen);
     lv_obj_remove_style_all(gEntryPad);
@@ -705,14 +740,15 @@ static void renderModel(const UiRenderModel& model) {
     setButtonEnabled(gArrowRightButton, model.inputEnabled);
 
     const bool showHome = model.screen == UiScreen::HOME;
+    const bool showHomeDetails = model.screen == UiScreen::HOME_DETAILS;
     const bool showEntry = model.screen == UiScreen::ENTRY || model.screen == UiScreen::WAITING_FOR_ARM;
     const bool showConfirm = model.screen == UiScreen::CONFIRM;
     const bool showLaunch = model.screen == UiScreen::FIRING;
     const bool showHero = model.screen == UiScreen::WAITING_FOR_ARM || model.screen == UiScreen::ENTRY || model.screen == UiScreen::CONFIRM;
-    const bool showStatusBar = showHome;
+    const bool showStatusBar = showHome || showHomeDetails;
     const bool showSubtitle = model.screen != UiScreen::LINK_WAIT;
 
-    if (showHome) {
+    if (showHome || showHomeDetails) {
         lv_obj_set_width(gTitleLabel, 220);
         lv_obj_set_style_text_align(gTitleLabel, LV_TEXT_ALIGN_RIGHT, 0);
         lv_obj_set_pos(gTitleLabel, 242, 12);
@@ -729,6 +765,8 @@ static void renderModel(const UiRenderModel& model) {
     }
 
     if (showHome) lv_obj_clear_flag(gHomeActions, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gHomeActions, LV_OBJ_FLAG_HIDDEN);
+    if (showHomeDetails) lv_obj_clear_flag(gDetailsPanel, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gDetailsPanel, LV_OBJ_FLAG_HIDDEN);
+    if (showHomeDetails) lv_obj_clear_flag(gBackButton, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gBackButton, LV_OBJ_FLAG_HIDDEN);
     if (showEntry) lv_obj_clear_flag(gEntryPad, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gEntryPad, LV_OBJ_FLAG_HIDDEN);
     if (showConfirm) lv_obj_clear_flag(gConfirmActions, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gConfirmActions, LV_OBJ_FLAG_HIDDEN);
     if (showLaunch) lv_obj_clear_flag(gLaunchOverlay, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(gLaunchOverlay, LV_OBJ_FLAG_HIDDEN);
@@ -767,6 +805,20 @@ static void renderModel(const UiRenderModel& model) {
         lv_obj_add_flag(gActiveNameLabel, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(gSequenceExpectedLabel, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(gSequenceEnteredLabel, LV_OBJ_FLAG_HIDDEN);
+    } else if (model.screen == UiScreen::HOME_DETAILS) {
+        char details[320];
+        snprintf(details, sizeof(details),
+                 "ONLINE   %s\nSTATE    %s\nKEY      %s\nCONT     %s\nFAULT    %s\nARMED    %s\nCAN FIRE %s\nLINK Q   %s",
+                 model.online ? "YES" : "NO",
+                 stateName(model.remoteState),
+                 model.keySwitchOn ? "ARM" : "SAFE",
+                 continuityName(model.continuityState),
+                 model.lastFaultCode == FaultCode::NONE ? "NONE" : "FAULT",
+                 model.armed ? "YES" : "NO",
+                 model.firePermitted ? "YES" : "NO",
+                 model.online ? "OK" : "--");
+        lv_label_set_text(gDetailsTitleLabel, "SYSTEM DETAILS");
+        lv_label_set_text(gDetailsBodyLabel, details);
     }
 
     if (model.screen == UiScreen::LINK_WAIT) {

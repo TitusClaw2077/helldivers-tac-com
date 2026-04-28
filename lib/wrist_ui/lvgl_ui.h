@@ -9,6 +9,8 @@ enum class LvglUiAction : uint8_t {
     ARM,
     DISARM,
     ACTIVATE,
+    DETAILS,
+    BACK,
     CANCEL,
     DIR_UP,
     DIR_DOWN,
