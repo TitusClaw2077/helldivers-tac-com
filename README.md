@@ -29,6 +29,16 @@ Enter a Helldivers 2 stratagem sequence on the wrist unit touchscreen. The corre
 - [PlatformIO](https://platformio.org/) (VS Code extension)
 - ESP32 Arduino framework (installed automatically via PlatformIO)
 
+### Known-good wrist dependency baseline
+- `lovyan03/LovyanGFX@1.2.19`
+- `paulstoffregen/XPT2046_Touchscreen`
+- `lvgl/lvgl@8.4.0`
+
+Notes:
+- `LovyanGFX@1.2.20` was observed failing against `lvgl/lvgl@8.4.0` in `lgfx_fonts.cpp`
+- wrist LVGL code should include the real package header form: `#include <lvgl/lvgl.h>`
+- on Windows PowerShell, use `Remove-Item -Recurse -Force .pio` instead of `rmdir /s /q .pio`
+
 ### Build targets
 
 ```bash
